@@ -1,7 +1,12 @@
+balboa_worldwide_app and hottub-app are git submodules.  Check them out so you
+can see the source code in there.
+
 In March of 2026 an old version of Claude Code read the file in this directory
-March-2026-Claude.md and did some work for me.  We worked togther for a while
-but we did not complete the task.  I want you to review the work done so far
-and make a list of the remaining tasks at a high level.  I also want you to
-look at the completed work and review it for correctness, security and
-maintainability. Write a plan file in this directory that describes the
-remaining steps to complete this project as well as any clarifying questions.
+March-2026-Claude.md and did some work with me.  We worked together for a while
+but we did not complete the task.  I want you to:
+
+- review - review the work done so far (in the hottub/ directory) 
+  for correctness, security and maintainability.
+- todo - make a list of the remaining tasks neccesary to finish this project
+- write a file in this directory that includes the review,  the todo and 
+  also includes any clarifying questions
