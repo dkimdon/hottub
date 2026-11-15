@@ -1,0 +1,3 @@
+[submodule "balboa_worldwide_app"]
+	path = balboa_worldwide_app
+	url = git@github.com:dkimdon/balboa_worldwide_app.git
