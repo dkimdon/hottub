@@ -4,12 +4,13 @@ These tests actually connect to the tub, read real status messages, and make
 small changes (toggling lights, adjusting temperature briefly) to verify the
 full end-to-end path of the library.
 
-Run with:
-    python -m pytest tests/test_live.py -v
-or:
-    python tests/test_live.py
+Run from operator/ with:
+    python3 -m unittest tests/test_live.py -v
 
-The tests restore the tub to its original state after each test.
+The tub is found by UDP discovery; set HOTTUB_SPA_IP to skip discovery.
+The tests restore the tub to its original state after each test.  Do not run
+them while an operator is controlling the same tub: it would see the changes
+as someone using the front panel.
 """
 
 import sys
@@ -28,7 +29,7 @@ from bwa.messages.status import Status, TemperatureScale
 # Discover the spa once for the whole test session
 # ---------------------------------------------------------------------------
 
-SPA_IP = None
+SPA_IP = os.environ.get("HOTTUB_SPA_IP")
 
 def get_spa_ip() -> str:
     global SPA_IP
@@ -153,7 +154,8 @@ def _pick_alternate_temp(status: Status) -> float:
 
     if scale == TemperatureScale.FAHRENHEIT:
         if rng == TemperatureRange.HIGH:
-            candidates = [103.0, 102.0, 101.0, 100.0]
+            # 106 first: the application relies on the tub accepting it.
+            candidates = [106.0, 105.0, 103.0, 102.0]
         else:
             candidates = [79.0, 78.0, 77.0, 76.0]
     else:

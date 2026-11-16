@@ -1,301 +1,317 @@
-"""Unit tests for message parsing and serialisation using the simulated server."""
+"""Unit tests for message framing, parsing and the client, using the simulated server."""
 
-import sys
-import os
 import socket
 import threading
 import time
 import unittest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from support import ServerThread
 
-from bwa.message import Message, InvalidMessage
-from bwa.messages.status import Status, HeatingMode, TemperatureScale, TemperatureRange
-from bwa.messages.configuration_request import ConfigurationRequest
-from bwa.messages.set_temperature import SetTemperature
-from bwa.messages.set_temperature_scale import SetTemperatureScale
-from bwa.messages.set_time import SetTime
-from bwa.messages.toggle_item import ToggleItem
-from bwa.server import Server, _encode_status_payload
 from bwa.client import Client
+from bwa.message import Message, InvalidMessage, build_frame, split_frames
+from bwa.messages import (
+    ConfigurationRequest,
+    ControlConfigurationRequest,
+    FilterCycles,
+    SetTemperature,
+    SetTemperatureScale,
+    SetTime,
+    ToggleItem,
+)
+from bwa.messages.status import Status, HeatingMode, TemperatureScale, TemperatureRange
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+def round_trip(msg: Message) -> Message:
+    return Message.parse(msg.to_bytes())
 
-def find_free_port() -> int:
-    with socket.socket() as s:
-        s.bind(("", 0))
-        return s.getsockname()[1]
-
-
-class ServerThread:
-    """Context manager that runs a Server in a background thread."""
-
-    def __init__(self, port: int) -> None:
-        self.port = port
-        self._server = Server(port=port)
-        self._thread = threading.Thread(target=self._server.run, daemon=True)
-
-    def __enter__(self) -> "ServerThread":
-        self._thread.start()
-        time.sleep(0.05)  # give server time to bind
-        return self
-
-    def __exit__(self, *_) -> None:
-        self._server.stop()
-
-
-# ---------------------------------------------------------------------------
-# CRC / framing tests (no network)
-# ---------------------------------------------------------------------------
 
 class TestFrameRoundTrip(unittest.TestCase):
 
-    def _round_trip(self, msg: Message) -> Message:
-        frame = msg.to_bytes()
-        return Message.parse(frame)
-
     def test_configuration_request(self):
-        parsed = self._round_trip(ConfigurationRequest())
-        self.assertIsInstance(parsed, ConfigurationRequest)
+        self.assertIsInstance(round_trip(ConfigurationRequest()), ConfigurationRequest)
 
     def test_set_temperature(self):
-        for temp in (80, 102, 104):
-            msg = SetTemperature(temp)
-            parsed = self._round_trip(msg)
+        for temp in (50, 80, 102, 104, 106):
+            parsed = round_trip(SetTemperature(temp))
             self.assertIsInstance(parsed, SetTemperature)
             self.assertEqual(parsed.temperature, temp)
 
-    def test_set_time_12h(self):
-        msg = SetTime(9, 15, twenty_four_hour_time=False)
-        parsed = self._round_trip(msg)
-        self.assertIsInstance(parsed, SetTime)
-        self.assertEqual(parsed.hour, 9)
-        self.assertEqual(parsed.minute, 15)
-        self.assertFalse(parsed.twenty_four_hour_time)
+    def test_set_temperature_wire_bytes(self):
+        frame = SetTemperature(104).to_bytes()
+        self.assertEqual(frame[:6], bytes.fromhex("7e060abf2068"))
 
-    def test_set_time_24h(self):
-        msg = SetTime(21, 45, twenty_four_hour_time=True)
-        parsed = self._round_trip(msg)
-        self.assertTrue(parsed.twenty_four_hour_time)
-        self.assertEqual(parsed.hour, 21)
-        self.assertEqual(parsed.minute, 45)
+    def test_set_time(self):
+        parsed = round_trip(SetTime(9, 15, twenty_four_hour_time=False))
+        self.assertEqual((parsed.hour, parsed.minute, parsed.twenty_four_hour_time), (9, 15, False))
+        parsed = round_trip(SetTime(21, 45, twenty_four_hour_time=True))
+        self.assertEqual((parsed.hour, parsed.minute, parsed.twenty_four_hour_time), (21, 45, True))
 
     def test_toggle_items(self):
         for item in ("pump1", "pump2", "light1", "heating_mode", "temperature_range"):
-            parsed = self._round_trip(ToggleItem(item))
+            parsed = round_trip(ToggleItem(item))
             self.assertIsInstance(parsed, ToggleItem)
             self.assertEqual(parsed.item, item)
 
-    def test_set_temperature_scale_fahrenheit(self):
-        msg = SetTemperatureScale(TemperatureScale.FAHRENHEIT)
-        parsed = self._round_trip(msg)
-        self.assertIsInstance(parsed, SetTemperatureScale)
-        self.assertEqual(parsed.scale, TemperatureScale.FAHRENHEIT)
+    def test_toggle_wire_bytes(self):
+        self.assertEqual(ToggleItem("heating_mode").to_bytes()[2:7], bytes.fromhex("0abf115100"))
+        self.assertEqual(ToggleItem("temperature_range").to_bytes()[2:7], bytes.fromhex("0abf115000"))
 
-    def test_set_temperature_scale_celsius(self):
-        msg = SetTemperatureScale(TemperatureScale.CELSIUS)
-        parsed = self._round_trip(msg)
-        self.assertEqual(parsed.scale, TemperatureScale.CELSIUS)
+    def test_set_temperature_scale(self):
+        for scale in TemperatureScale:
+            self.assertEqual(round_trip(SetTemperatureScale(scale)).scale, scale)
+
+    def test_control_configuration_request_payloads(self):
+        # Payloads from doc/protocol.md in the Ruby repository.
+        cases = {
+            ControlConfigurationRequest.FILTER: "010000",
+            ControlConfigurationRequest.CONTROL: "020000",
+            ControlConfigurationRequest.CONTROL2: "000001",
+        }
+        for request, payload in cases.items():
+            frame = ControlConfigurationRequest(request).to_bytes()
+            self.assertEqual(frame[2:8], bytes.fromhex("0abf22" + payload))
+            self.assertEqual(Message.parse(frame).request, request)
 
     def test_invalid_crc_raises(self):
-        msg = ConfigurationRequest()
-        frame = bytearray(msg.to_bytes())
-        frame[-2] ^= 0xFF  # corrupt CRC
+        frame = bytearray(ConfigurationRequest().to_bytes())
+        frame[-2] ^= 0xFF
         with self.assertRaises(InvalidMessage):
             Message.parse(bytes(frame))
 
     def test_invalid_start_byte_raises(self):
-        msg = ConfigurationRequest()
-        frame = bytearray(msg.to_bytes())
+        frame = bytearray(ConfigurationRequest().to_bytes())
         frame[0] = 0x00
         with self.assertRaises(InvalidMessage):
             Message.parse(bytes(frame))
 
+    def test_short_frame_raises(self):
+        for frame in (b"", b"\x7e", b"\x7e\x7e", b"\x7e\x00\x7e"):
+            with self.assertRaises(InvalidMessage):
+                Message.parse(frame)
+
     def test_unknown_message_type_raises(self):
-        # Build a frame with a valid CRC but an unknown message type
-        from bwa import crc as _crc
-        payload = b""
-        msg_type = bytes([0xDE, 0xAD, 0xBE])
-        L = len(payload) + 5
-        inner = bytes([L]) + msg_type + payload
-        checksum = _crc.checksum(inner)
-        frame = bytes([0x7E]) + inner + bytes([checksum, 0x7E])
         with self.assertRaises(InvalidMessage):
-            Message.parse(frame)
+            Message.parse(build_frame(bytes([0xDE, 0xAD, 0xBE])))
 
 
-# ---------------------------------------------------------------------------
-# Status payload encoding / decoding
-# ---------------------------------------------------------------------------
+class TestSplitFrames(unittest.TestCase):
+
+    def test_splits_multiple_frames_and_keeps_tail(self):
+        a = ConfigurationRequest().to_bytes()
+        b = SetTemperature(104).to_bytes()
+        frames, tail = split_frames(a + b + b[:3])
+        self.assertEqual(frames, [a, b])
+        self.assertEqual(tail, b[:3])
+
+    def test_skips_leading_garbage(self):
+        a = ConfigurationRequest().to_bytes()
+        frames, tail = split_frames(b"\x01\x02\x03" + a)
+        self.assertEqual(frames, [a])
+        self.assertEqual(tail, b"")
+
+    def test_resyncs_after_truncated_frame(self):
+        # The tail of a frame whose start was lost, then a good frame.  The
+        # stray end delimiter must not be taken for a frame start.
+        a = ConfigurationRequest().to_bytes()
+        b = SetTemperature(104).to_bytes()
+        frames, _ = split_frames(a[3:] + b)
+        self.assertEqual(frames, [b])
+
 
 class TestStatusEncoding(unittest.TestCase):
 
-    def _make_status_frame(self, s: Status) -> bytes:
-        """Build a complete Status wire frame from a Status object."""
-        from bwa import crc as _crc
-        payload = _encode_status_payload(s)
-        L = len(payload) + 5
-        inner = bytes([L]) + Status.MESSAGE_TYPE + payload
-        checksum = _crc.checksum(inner)
-        return bytes([0x7E]) + inner + bytes([checksum, 0x7E])
-
-    def _round_trip(self, s: Status) -> Status:
-        frame = self._make_status_frame(s)
-        return Message.parse(frame)
-
-    def test_current_temperature_fahrenheit(self):
-        s = Status()
-        s.current_temperature = 103.0
-        s.set_temperature = 104.0
-        s.temperature_scale = TemperatureScale.FAHRENHEIT
-        parsed = self._round_trip(s)
+    def test_fahrenheit(self):
+        parsed = round_trip(Status(current_temperature=103.0, set_temperature=106.0))
         self.assertEqual(parsed.current_temperature, 103.0)
-        self.assertEqual(parsed.set_temperature, 104.0)
+        self.assertEqual(parsed.set_temperature, 106.0)
         self.assertEqual(parsed.temperature_scale, TemperatureScale.FAHRENHEIT)
 
-    def test_current_temperature_none(self):
-        s = Status()
-        s.current_temperature = None
-        parsed = self._round_trip(s)
-        self.assertIsNone(parsed.current_temperature)
+    def test_current_temperature_unknown(self):
+        self.assertIsNone(round_trip(Status(current_temperature=None)).current_temperature)
 
-    def test_celsius_temperature(self):
-        s = Status()
-        s.temperature_scale = TemperatureScale.CELSIUS
-        s.current_temperature = 38.5
-        s.set_temperature = 40.0
-        parsed = self._round_trip(s)
+    def test_celsius(self):
+        parsed = round_trip(Status(
+            temperature_scale=TemperatureScale.CELSIUS,
+            current_temperature=38.5,
+            set_temperature=40.0,
+        ))
         self.assertEqual(parsed.temperature_scale, TemperatureScale.CELSIUS)
-        self.assertAlmostEqual(parsed.current_temperature, 38.5, places=1)
-        self.assertAlmostEqual(parsed.set_temperature, 40.0, places=1)
+        self.assertEqual(parsed.current_temperature, 38.5)
+        self.assertEqual(parsed.set_temperature, 40.0)
 
-    def test_heating_mode_rest(self):
-        s = Status()
-        s.heating_mode = HeatingMode.REST
-        parsed = self._round_trip(s)
-        self.assertEqual(parsed.heating_mode, HeatingMode.REST)
+    def test_all_fields_round_trip(self):
+        original = Status(
+            priming=True,
+            heating_mode=HeatingMode.READY_IN_REST,
+            twenty_four_hour_time=True,
+            heating=True,
+            temperature_range=TemperatureRange.LOW,
+            hour=23,
+            minute=59,
+            circ_pump=True,
+            pump1=2,
+            pump2=1,
+            light1=True,
+            current_temperature=77.0,
+            set_temperature=60.0,
+        )
+        self.assertEqual(round_trip(original), original)
 
-    def test_heating_mode_ready_in_rest(self):
-        s = Status()
-        s.heating_mode = HeatingMode.READY_IN_REST
-        parsed = self._round_trip(s)
-        self.assertEqual(parsed.heating_mode, HeatingMode.READY_IN_REST)
+    def test_payload_byte_positions(self):
+        # Positions from doc/protocol.md: current temp at 2, set temp at 20,
+        # heating mode at 5, range flag 0x04 at 10.
+        payload = Status(
+            current_temperature=99.0,
+            set_temperature=104.0,
+            heating_mode=HeatingMode.REST,
+            temperature_range=TemperatureRange.HIGH,
+        )._serialize_payload()
+        self.assertEqual(len(payload), 24)
+        self.assertEqual(payload[2], 99)
+        self.assertEqual(payload[20], 104)
+        self.assertEqual(payload[5], 0x01)
+        self.assertEqual(payload[10] & 0x04, 0x04)
 
-    def test_pump_states(self):
-        s = Status()
-        s.pump1 = 2
-        s.pump2 = 1
-        parsed = self._round_trip(s)
-        self.assertEqual(parsed.pump1, 2)
-        self.assertEqual(parsed.pump2, 1)
-
-    def test_lights_and_circ_pump(self):
-        s = Status()
-        s.light1 = True
-        s.circ_pump = True
-        parsed = self._round_trip(s)
-        self.assertTrue(parsed.light1)
-        self.assertTrue(parsed.circ_pump)
-
-    def test_priming_flag(self):
-        s = Status()
-        s.priming = True
-        parsed = self._round_trip(s)
-        self.assertTrue(parsed.priming)
-
-    def test_24h_time(self):
-        s = Status()
-        s.hour = 23
-        s.minute = 59
-        s.twenty_four_hour_time = True
-        parsed = self._round_trip(s)
-        self.assertEqual(parsed.hour, 23)
-        self.assertEqual(parsed.minute, 59)
-        self.assertTrue(parsed.twenty_four_hour_time)
-
-    def test_temperature_range_low(self):
-        s = Status()
-        s.temperature_range = TemperatureRange.LOW
-        parsed = self._round_trip(s)
-        self.assertEqual(parsed.temperature_range, TemperatureRange.LOW)
-
-
-# ---------------------------------------------------------------------------
-# Integration tests using the simulated server
-# ---------------------------------------------------------------------------
 
 class TestClientServer(unittest.TestCase):
 
     def setUp(self):
-        self.port = find_free_port()
-        self._srv_ctx = ServerThread(self.port)
-        self._srv_ctx.__enter__()
+        self.srv = ServerThread()
+        self.srv.__enter__()
+        self.addCleanup(self.srv.__exit__)
 
-    def tearDown(self):
-        self._srv_ctx.__exit__()
+    def client(self) -> Client:
+        return Client("127.0.0.1", self.srv.port, timeout=2.0)
 
     def test_poll_receives_status(self):
-        with Client("127.0.0.1", self.port) as spa:
-            status = spa.poll_until_status(timeout=3.0)
-        self.assertIsNotNone(status)
+        with self.client() as spa:
+            status = spa.poll_until_status(timeout=2.0)
         self.assertIsInstance(status, Status)
 
     def test_set_temperature_reflected(self):
-        with Client("127.0.0.1", self.port) as spa:
-            spa.poll_until_status(timeout=3.0)
+        with self.client() as spa:
             spa.set_temperature(104)
-            # Wait for the server to update and send a new status
-            time.sleep(1.2)
-            status = spa.poll_until_status(timeout=3.0)
+            status = spa.wait_for_status(lambda s: s.set_temperature == 104.0, timeout=2.0)
         self.assertIsNotNone(status)
-        self.assertEqual(status.set_temperature, 104.0)
 
-    def test_toggle_light1(self):
-        with Client("127.0.0.1", self.port) as spa:
-            s0 = spa.poll_until_status(timeout=3.0)
-            initial = s0.light1
+    def test_set_temperature_106(self):
+        with self.client() as spa:
+            spa.set_temperature(106)
+            status = spa.wait_for_status(lambda s: s.set_temperature == 106.0, timeout=2.0)
+        self.assertIsNotNone(status)
+
+    def test_toggles(self):
+        with self.client() as spa:
             spa.toggle_light1()
-            time.sleep(1.2)
-            s1 = spa.poll_until_status(timeout=3.0)
-        self.assertIsNotNone(s1)
-        self.assertNotEqual(s1.light1, initial)
-
-    def test_toggle_pump1_cycles(self):
-        with Client("127.0.0.1", self.port) as spa:
-            s0 = spa.poll_until_status(timeout=3.0)
-            initial = s0.pump1  # starts at 0
+            self.assertIsNotNone(spa.wait_for_status(lambda s: s.light1, timeout=2.0))
             spa.toggle_pump1()
-            time.sleep(1.2)
-            s1 = spa.poll_until_status(timeout=3.0)
-        self.assertEqual(s1.pump1, (initial + 1) % 3)
+            self.assertIsNotNone(spa.wait_for_status(lambda s: s.pump1 == 1, timeout=2.0))
+            spa.toggle_heating_mode()
+            self.assertIsNotNone(
+                spa.wait_for_status(lambda s: s.heating_mode == HeatingMode.REST, timeout=2.0)
+            )
+            spa.toggle_temperature_range()
+            self.assertIsNotNone(
+                spa.wait_for_status(
+                    lambda s: s.temperature_range == TemperatureRange.LOW, timeout=2.0
+                )
+            )
 
-    def test_request_configuration_no_crash(self):
-        with Client("127.0.0.1", self.port) as spa:
-            spa.request_configuration()
-            # drain responses
+    def test_filter_configuration_request(self):
+        with self.client() as spa:
+            spa.request_filter_configuration()
             deadline = time.monotonic() + 2.0
-            while time.monotonic() < deadline:
-                if spa.messages_pending():
-                    spa.poll()
-                else:
-                    time.sleep(0.05)
+            while spa.last_filter_cycles is None and time.monotonic() < deadline:
+                spa.poll(1.0)
+        self.assertIsInstance(spa.last_filter_cycles, FilterCycles)
 
     def test_messages_pending(self):
-        with Client("127.0.0.1", self.port) as spa:
-            # The server sends status every second; after 1.5s something should be pending
-            time.sleep(1.5)
+        with self.client() as spa:
+            time.sleep(0.2)
             self.assertTrue(spa.messages_pending())
 
-    def test_context_manager(self):
-        with Client("127.0.0.1", self.port) as spa:
-            status = spa.poll_until_status(timeout=3.0)
-            self.assertIsNotNone(status)
-        # socket should be closed after __exit__; further operations raise
+    def test_poll_after_close_raises(self):
+        with self.client() as spa:
+            spa.poll_until_status(timeout=2.0)
         with self.assertRaises(OSError):
-            spa.poll()
+            spa.poll(0.5)
+
+
+class TestClientFailures(unittest.TestCase):
+    """The failure modes that matter when the spa's wifi module misbehaves."""
+
+    def _listener(self, behaviour):
+        listen = socket.socket()
+        listen.bind(("127.0.0.1", 0))
+        listen.listen(1)
+        self.addCleanup(listen.close)
+
+        def serve():
+            try:
+                conn, _ = listen.accept()
+            except OSError:
+                return
+            with conn:
+                behaviour(conn)
+
+        threading.Thread(target=serve, daemon=True).start()
+        return listen.getsockname()[1]
+
+    def test_closed_connection_raises_instead_of_spinning(self):
+        port = self._listener(lambda conn: None)  # accept, then close at once
+        with Client("127.0.0.1", port, timeout=2.0) as spa:
+            started = time.monotonic()
+            with self.assertRaises(ConnectionError):
+                spa.poll()
+            self.assertLess(time.monotonic() - started, 1.5)
+
+    def test_silent_spa_times_out(self):
+        port = self._listener(lambda conn: time.sleep(1.0))
+        with Client("127.0.0.1", port, timeout=2.0) as spa:
+            with self.assertRaises(TimeoutError):
+                spa.poll(0.2)
+            self.assertIsNone(spa.poll_until_status(timeout=0.2))
+
+    def test_partial_frame_times_out(self):
+        def behaviour(conn):
+            conn.sendall(Status().to_bytes()[:10])
+            time.sleep(1.0)
+
+        port = self._listener(behaviour)
+        with Client("127.0.0.1", port, timeout=2.0) as spa:
+            started = time.monotonic()
+            self.assertIsNone(spa.poll_until_status(timeout=0.3))
+            self.assertLess(time.monotonic() - started, 0.9)
+
+    def test_no_stale_status_after_spa_goes_quiet(self):
+        def behaviour(conn):
+            conn.sendall(Status().to_bytes())
+            time.sleep(1.0)
+
+        port = self._listener(behaviour)
+        with Client("127.0.0.1", port, timeout=2.0) as spa:
+            self.assertIsNotNone(spa.poll_until_status(timeout=0.5))
+            self.assertIsNone(spa.poll_until_status(timeout=0.2))
+
+    def test_resyncs_after_garbage(self):
+        # Garbage that looks like a frame header swallows the frame behind it;
+        # the client must recover on the frames that follow.
+        def behaviour(conn):
+            conn.sendall(b"\x00\x7e\x7e\x13garbage" + Status(set_temperature=103.0).to_bytes() * 3)
+            time.sleep(0.5)
+
+        port = self._listener(behaviour)
+        with Client("127.0.0.1", port, timeout=2.0) as spa:
+            status = spa.poll_until_status(timeout=1.0)
+        self.assertIsNotNone(status)
+        self.assertEqual(status.set_temperature, 103.0)
+
+    def test_connect_refused_raises_oserror(self):
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            port = s.getsockname()[1]
+        with self.assertRaises(OSError):
+            Client("127.0.0.1", port, timeout=1.0)
 
 
 if __name__ == "__main__":

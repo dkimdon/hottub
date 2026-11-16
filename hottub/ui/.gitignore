@@ -1,0 +1,4 @@
+node_modules/
+dist/
+# Written by "scripts/deploy.py ui-config <env>" for local development.
+public/config.json

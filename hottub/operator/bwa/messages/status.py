@@ -105,6 +105,35 @@ class Status(Message):
                 self.current_temperature /= 2.0
             self.set_temperature /= 2.0
 
+    def _serialize_payload(self) -> bytes:
+        data = bytearray(self.MESSAGE_LENGTH)
+        data[1] = 0x01 if self.priming else 0x00
+        data[3] = self.hour
+        data[4] = self.minute
+        data[5] = {
+            HeatingMode.READY: 0x00,
+            HeatingMode.REST: 0x01,
+            HeatingMode.READY_IN_REST: 0x02,
+        }[self.heating_mode]
+
+        celsius = self.temperature_scale == TemperatureScale.CELSIUS
+        data[9] = (0x01 if celsius else 0) | (0x02 if self.twenty_four_hour_time else 0)
+        data[10] = (0x30 if self.heating else 0) | (
+            0x04 if self.temperature_range == TemperatureRange.HIGH else 0
+        )
+        data[11] = (self.pump1 & 0x03) | ((self.pump2 & 0x03) << 2)
+        data[13] = 0x02 if self.circ_pump else 0x00
+        data[14] = 0x03 if self.light1 else 0x00
+
+        factor = 2 if celsius else 1
+        data[2] = (
+            0xFF
+            if self.current_temperature is None
+            else int(self.current_temperature * factor)
+        )
+        data[20] = int(self.set_temperature * factor)
+        return bytes(data)
+
     def format_time(self) -> str:
         if self.twenty_four_hour_time:
             return f"{self.hour:02d}:{self.minute:02d}"

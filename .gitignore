@@ -3,3 +3,6 @@ __pycache__/
 *.pyo
 .DS_Store
 .venv/
+node_modules/
+operator-state.json
+operator-state.json.tmp

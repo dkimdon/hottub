@@ -1,0 +1,517 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Hot tub control: users (Cognito), API (HTTP API + Lambda), state (DynamoDB),
+  nightly turn-off (EventBridge Scheduler) and web UI hosting (S3 + CloudFront).
+  One stack per environment: hottub-test and hottub-live.
+
+# Deploy with scripts/deploy.py, which packages the Lambda code (the local path
+# in TubFunction.Code) and supplies the parameters.
+
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [test, live]
+  OperatorKey:
+    Type: String
+    NoEcho: true
+    MinLength: 32
+    Description: Shared secret the operator sends in the X-Operator-Key header.
+  AutoOffCron:
+    Type: String
+    Default: cron(0/5 0 * * ? *)
+    Description: >
+      When the tub is turned off automatically.  The default is every five
+      minutes during the hour after midnight, which matches the old system:
+      the tub cannot be left on between midnight and 1am.
+  TimeZone:
+    Type: String
+    Default: America/Los_Angeles
+    Description: Time zone AutoOffCron is evaluated in.
+
+  UiDomainName:
+    Type: String
+    Default: ""
+    Description: >
+      The web UI's own domain name, e.g. hottub.example.org.  Empty = use the
+      address CloudFront assigns.  Needs UiCertificateArn.
+  UiCertificateArn:
+    Type: String
+    Default: ""
+    Description: ACM certificate (in us-east-1) covering UiDomainName.
+  EmailFrom:
+    Type: String
+    Default: ""
+    Description: >
+      Address invitations and password-reset codes are sent from, using SES.
+      Empty = Cognito's built-in sender.  Needs EmailIdentityArn.
+  EmailIdentityArn:
+    Type: String
+    Default: ""
+    Description: ARN of the verified SES identity that EmailFrom belongs to.
+
+Conditions:
+  IsTest: !Equals [!Ref Environment, test]
+  HasDomain: !Not [!Equals [!Ref UiDomainName, ""]]
+  HasEmail: !Not [!Equals [!Ref EmailFrom, ""]]
+
+Resources:
+
+  # ---------- State --------------------------------------------------------
+
+  TubTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub hottub-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+
+  # Setpoint changes and temperature readings, for the history graph.
+  # DynamoDB deletes each item once the time in its "expires" attribute passes.
+  HistoryTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub hottub-history-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: kind
+          AttributeType: S
+        - AttributeName: at
+          AttributeType: S
+      KeySchema:
+        - AttributeName: kind
+          KeyType: HASH
+        - AttributeName: at
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: expires
+        Enabled: true
+
+  # ---------- Users --------------------------------------------------------
+
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      UserPoolName: !Sub hottub-${Environment}
+      UsernameAttributes: [email]
+      AutoVerifiedAttributes: [email]
+      UsernameConfiguration:
+        CaseSensitive: false
+      # No self-registration.  Accounts are created by an admin in the web UI
+      # or with scripts/manage_users.py.
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: true
+        InviteMessageTemplate:
+          EmailSubject: Your hot tub account
+          EmailMessage: !Sub
+            - >-
+              You have been given access to the hot tub controls at
+              https://${UiHost} <br><br>
+              Sign in with the email address {username} and the temporary
+              password {####} <br><br>
+              You will be asked to choose your own password the first time you
+              sign in.  The temporary password stops working after 7 days.
+            - UiHost: !If [HasDomain, !Ref UiDomainName, !GetAtt UiDistribution.DomainName]
+      EmailConfiguration: !If
+        - HasEmail
+        - EmailSendingAccount: DEVELOPER
+          SourceArn: !Ref EmailIdentityArn
+          From: !Sub Hot Tub <${EmailFrom}>
+        - EmailSendingAccount: COGNITO_DEFAULT
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireUppercase: true
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+          TemporaryPasswordValidityDays: 7
+      Schema:
+        - Name: email
+          AttributeDataType: String
+          Required: true
+          Mutable: true
+
+  AdminGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      UserPoolId: !Ref UserPool
+      GroupName: admin
+      Description: May add and remove users and grant admin rights.
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub hottub-ui-${Environment}
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      # Plain-password sign-in exists only in test, for automated tests.
+      ExplicitAuthFlows: !If
+        - IsTest
+        - [ALLOW_USER_SRP_AUTH, ALLOW_REFRESH_TOKEN_AUTH, ALLOW_USER_PASSWORD_AUTH]
+        - [ALLOW_USER_SRP_AUTH, ALLOW_REFRESH_TOKEN_AUTH]
+      PreventUserExistenceErrors: ENABLED
+      EnableTokenRevocation: true
+      IdTokenValidity: 60
+      AccessTokenValidity: 60
+      RefreshTokenValidity: 365
+      TokenValidityUnits:
+        IdToken: minutes
+        AccessToken: minutes
+        RefreshToken: days
+
+  # ---------- Lambda -------------------------------------------------------
+
+  FunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: hottub
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:UpdateItem
+                Resource: !GetAtt TubTable.Arn
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:Query
+                Resource: !GetAtt HistoryTable.Arn
+              - Effect: Allow
+                Action:
+                  - cognito-idp:ListUsers
+                  - cognito-idp:ListUsersInGroup
+                  - cognito-idp:AdminListGroupsForUser
+                  - cognito-idp:AdminGetUser
+                  - cognito-idp:AdminCreateUser
+                  - cognito-idp:AdminDeleteUser
+                  - cognito-idp:AdminAddUserToGroup
+                  - cognito-idp:AdminRemoveUserFromGroup
+                  - cognito-idp:AdminResetUserPassword
+                Resource: !GetAtt UserPool.Arn
+
+  FunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/hottub-api-${Environment}
+      RetentionInDays: 90
+
+  TubFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: FunctionLogGroup
+    Properties:
+      FunctionName: !Sub hottub-api-${Environment}
+      Runtime: python3.13
+      Handler: handler.handler
+      Role: !GetAtt FunctionRole.Arn
+      Timeout: 15
+      MemorySize: 256
+      # Local path; "aws cloudformation package" uploads it under a name
+      # derived from its contents, so every code change is deployed.
+      Code: ../api/function
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref TubTable
+          HISTORY_TABLE_NAME: !Ref HistoryTable
+          USER_POOL_ID: !Ref UserPool
+          OPERATOR_KEY: !Ref OperatorKey
+
+  # ---------- API ----------------------------------------------------------
+
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub hottub-${Environment}
+      ProtocolType: HTTP
+      # Only the web UI is called from a browser; the operator is not.
+      CorsConfiguration:
+        # The CloudFront address always works, with or without a domain name
+        # of our own in front of it.
+        AllowOrigins:
+          - !Sub https://${UiDistribution.DomainName}
+          - !If [HasDomain, !Sub "https://${UiDomainName}", !Ref "AWS::NoValue"]
+          - !If [IsTest, http://localhost:5173, !Ref "AWS::NoValue"]
+        AllowMethods: [GET, PUT, POST, PATCH, DELETE]
+        AllowHeaders: [authorization, content-type]
+        MaxAge: 3600
+
+  ApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref HttpApi
+      StageName: $default
+      AutoDeploy: true
+      DefaultRouteSettings:
+        ThrottlingRateLimit: 10
+        ThrottlingBurstLimit: 20
+
+  ApiAuthorizer:
+    Type: AWS::ApiGatewayV2::Authorizer
+    Properties:
+      ApiId: !Ref HttpApi
+      Name: cognito
+      AuthorizerType: JWT
+      IdentitySource: [$request.header.Authorization]
+      JwtConfiguration:
+        Issuer: !Sub https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}
+        Audience: [!Ref UserPoolClient]
+
+  ApiIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt TubFunction.Arn
+      PayloadFormatVersion: "2.0"
+
+  ApiInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref TubFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*
+
+  # Routes.  Keep in step with ROUTES in api/function/handler.py.
+  # Signed-in users: a valid Cognito token is required by API Gateway.
+
+  RouteGetTub:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: GET /tub
+      AuthorizationType: JWT
+      AuthorizerId: !Ref ApiAuthorizer
+      Target: !Sub integrations/${ApiIntegration}
+
+  RoutePutSetpoint:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: PUT /tub/setpoint
+      AuthorizationType: JWT
+      AuthorizerId: !Ref ApiAuthorizer
+      Target: !Sub integrations/${ApiIntegration}
+
+  RouteGetHistory:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: GET /history
+      AuthorizationType: JWT
+      AuthorizerId: !Ref ApiAuthorizer
+      Target: !Sub integrations/${ApiIntegration}
+
+  RouteListUsers:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: GET /users
+      AuthorizationType: JWT
+      AuthorizerId: !Ref ApiAuthorizer
+      Target: !Sub integrations/${ApiIntegration}
+
+  RouteCreateUser:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: POST /users
+      AuthorizationType: JWT
+      AuthorizerId: !Ref ApiAuthorizer
+      Target: !Sub integrations/${ApiIntegration}
+
+  RouteUpdateUser:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: PATCH /users/{username}
+      AuthorizationType: JWT
+      AuthorizerId: !Ref ApiAuthorizer
+      Target: !Sub integrations/${ApiIntegration}
+
+  RouteDeleteUser:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: DELETE /users/{username}
+      AuthorizationType: JWT
+      AuthorizerId: !Ref ApiAuthorizer
+      Target: !Sub integrations/${ApiIntegration}
+
+  RouteResetPassword:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: POST /users/{username}/reset-password
+      AuthorizationType: JWT
+      AuthorizerId: !Ref ApiAuthorizer
+      Target: !Sub integrations/${ApiIntegration}
+
+  # The operator: authenticated by the Lambda, using the shared key.
+
+  RouteOperatorDesired:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: GET /operator/desired
+      AuthorizationType: NONE
+      Target: !Sub integrations/${ApiIntegration}
+
+  RouteOperatorReport:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: PUT /operator/report
+      AuthorizationType: NONE
+      Target: !Sub integrations/${ApiIntegration}
+
+  # ---------- Nightly turn-off ---------------------------------------------
+
+  AutoOffRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: scheduler.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: invoke
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt TubFunction.Arn
+
+  AutoOffSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: !Sub hottub-auto-off-${Environment}
+      Description: Turns the hot tub off at night.
+      ScheduleExpression: !Ref AutoOffCron
+      ScheduleExpressionTimezone: !Ref TimeZone
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      Target:
+        Arn: !GetAtt TubFunction.Arn
+        RoleArn: !GetAtt AutoOffRole.Arn
+        Input: '{"source": "hottub.schedule"}'
+
+  # ---------- Web UI hosting -----------------------------------------------
+
+  UiBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  UiOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub hottub-ui-${Environment}
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  UiDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Comment: !Sub Hot tub UI (${Environment})
+        Enabled: true
+        HttpVersion: http2and3
+        PriceClass: PriceClass_100
+        DefaultRootObject: index.html
+        Aliases: !If [HasDomain, [!Ref UiDomainName], !Ref "AWS::NoValue"]
+        ViewerCertificate: !If
+          - HasDomain
+          - AcmCertificateArn: !Ref UiCertificateArn
+            SslSupportMethod: sni-only
+            MinimumProtocolVersion: TLSv1.2_2021
+          - CloudFrontDefaultCertificate: true
+        Origins:
+          - Id: ui
+            DomainName: !GetAtt UiBucket.RegionalDomainName
+            OriginAccessControlId: !Ref UiOriginAccessControl
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+        DefaultCacheBehavior:
+          TargetOriginId: ui
+          ViewerProtocolPolicy: redirect-to-https
+          Compress: true
+          # AWS managed policies: CachingOptimized and SecurityHeadersPolicy.
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+          ResponseHeadersPolicyId: 67f7725c-6f97-4210-82d7-5512b31e9d03
+
+  UiBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref UiBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub ${UiBucket.Arn}/*
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub arn:aws:cloudfront::${AWS::AccountId}:distribution/${UiDistribution}
+
+Outputs:
+  UiUrl:
+    Description: Address of the web UI
+    Value: !If
+      - HasDomain
+      - !Sub https://${UiDomainName}
+      - !Sub https://${UiDistribution.DomainName}
+  UiCloudFrontDomain:
+    Description: What the UI's own domain name must point to (CNAME)
+    Value: !GetAtt UiDistribution.DomainName
+  ApiUrl:
+    Description: Base URL of the API
+    Value: !GetAtt HttpApi.ApiEndpoint
+  UserPoolId:
+    Value: !Ref UserPool
+  UserPoolClientId:
+    Value: !Ref UserPoolClient
+  UiBucketName:
+    Value: !Ref UiBucket
+  UiDistributionId:
+    Value: !Ref UiDistribution
+  TableName:
+    Value: !Ref TubTable

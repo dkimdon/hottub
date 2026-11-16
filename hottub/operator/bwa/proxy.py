@@ -8,13 +8,10 @@ Usage::
     proxy.run()   # blocks; Ctrl-C to stop
 """
 
-import select
 import socket
 import threading
 
-from .message import Message, InvalidMessage
-
-FRAME_START = 0x7E
+from .message import Message, InvalidMessage, split_frames
 
 
 class Proxy:
@@ -35,19 +32,21 @@ class Proxy:
 
         client_sock, addr = listen_sock.accept()
         print(f"[Proxy] Client connected from {addr}")
-        server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_sock.connect((self.host, self.port))
+        server_sock = socket.create_connection((self.host, self.port), timeout=10)
+        server_sock.settimeout(None)
 
-        t1 = threading.Thread(
-            target=self._shuffle, args=(client_sock, server_sock, "Client→Spa"), daemon=True
-        )
-        t2 = threading.Thread(
-            target=self._shuffle, args=(server_sock, client_sock, "Spa→Client"), daemon=True
-        )
-        t1.start()
-        t2.start()
-        t1.join()
-        t2.join()
+        threads = [
+            threading.Thread(
+                target=self._shuffle, args=(client_sock, server_sock, "Client→Spa"), daemon=True
+            ),
+            threading.Thread(
+                target=self._shuffle, args=(server_sock, client_sock, "Spa→Client"), daemon=True
+            ),
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
 
         client_sock.close()
         server_sock.close()
@@ -61,28 +60,12 @@ class Proxy:
                 if not chunk:
                     dst.close()
                     break
-                buf += chunk
-                buf, _ = self._drain_frames(buf, tag)
                 dst.sendall(chunk)
+                frames, buf = split_frames(buf + chunk)
+                for frame in frames:
+                    try:
+                        print(f"[Proxy] {tag}: {Message.parse(frame)!r}")
+                    except InvalidMessage as e:
+                        print(f"[Proxy] {tag}: invalid message: {e} ({frame.hex(' ')})")
         except OSError:
             pass
-
-    def _drain_frames(self, buf: bytes, tag: str) -> tuple[bytes, list]:
-        msgs = []
-        while len(buf) >= 2:
-            if buf[0] != FRAME_START:
-                buf = buf[1:]
-                continue
-            L = buf[1]
-            total = L + 2
-            if len(buf) < total:
-                break
-            frame = buf[:total]
-            buf = buf[total:]
-            try:
-                msg = Message.parse(frame)
-                print(f"[Proxy] {tag}: {msg!r}")
-                msgs.append(msg)
-            except InvalidMessage as e:
-                print(f"[Proxy] {tag}: invalid message: {e}")
-        return buf, msgs

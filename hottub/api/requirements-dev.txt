@@ -1,0 +1,4 @@
+# Needed only to run the tests and admin scripts on a development machine.
+# The Lambda itself uses nothing beyond the boto3 that AWS provides.
+boto3
+moto[dynamodb,cognitoidp]>=5

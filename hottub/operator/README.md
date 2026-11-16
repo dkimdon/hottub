@@ -67,10 +67,10 @@ with Client("10.0.0.105") as spa:
     # For Celsius: spa.set_temperature(40)  (library doubles it automatically)
 ```
 
-**Valid ranges:**
+**Valid ranges** (the tub ignores a temperature outside its current range):
 | Scale | Range | Min | Max |
 |-------|-------|-----|-----|
-| °F | high | 80 | 104 |
+| °F | high | 80 | 104 (some models, including ours, accept 106) |
 | °F | low  | 50 | 80  |
 | °C | high | 26 | 40  |
 | °C | low  | 10 | 26  |
@@ -113,21 +113,31 @@ ip = find_spa()
 ### Continuous monitoring loop
 
 ```python
-import time
 from bwa.client import Client
-from bwa.message import InvalidMessage
 
 with Client("10.0.0.105") as spa:
     while True:
-        try:
-            msg = spa.poll()          # blocks until next message
-            from bwa.messages.status import Status
-            if isinstance(msg, Status):
-                print(f"{msg.format_time()}  {msg.current_temperature}°F → {msg.set_temperature}°F")
-        except InvalidMessage as e:
-            print(f"Bad message: {e}")
-        except KeyboardInterrupt:
-            break
+        status = spa.poll_until_status(timeout=10.0)
+        if status is None:
+            print("No status from the tub for 10 seconds")
+            continue
+        print(f"{status.format_time()}  {status.current_temperature}°F → {status.set_temperature}°F")
+```
+
+### Failure handling
+
+Nothing in the client waits forever:
+
+```python
+from bwa.client import Client
+
+try:
+    with Client("10.0.0.105", timeout=10.0) as spa:   # OSError if it cannot connect
+        spa.set_temperature(104)
+        # Wait until the tub confirms; None if it does not within 5 seconds.
+        confirmed = spa.wait_for_status(lambda s: s.set_temperature == 104, timeout=5.0)
+except OSError as e:          # includes TimeoutError and ConnectionError
+    print(f"Tub unreachable: {e}")
 ```
 
 ### Using the simulated server (for testing without hardware)
@@ -137,14 +147,11 @@ import threading
 from bwa.server import Server
 from bwa.client import Client
 
-port = 14257
-srv = Server(port=port)
-t = threading.Thread(target=srv.run, daemon=True)
-t.start()
+srv = Server(port=0)                    # 0 = pick a free port
+threading.Thread(target=srv.run, daemon=True).start()
 
-with Client("127.0.0.1", port) as spa:
-    status = spa.poll_until_status()
-    print(status)
+with Client("127.0.0.1", srv.port) as spa:
+    print(spa.poll_until_status())
     spa.set_temperature(103)
 
 srv.stop()
@@ -157,13 +164,15 @@ srv.stop()
 ### `bwa.client.Client`
 
 ```python
-Client(host: str, port: int = 4257)
+Client(host: str, port: int = 4257, timeout: float = 10.0)
 ```
 
 | Method | Description |
 |--------|-------------|
-| `poll() -> Message` | Block until one message arrives; update `last_status` if it's a Status |
-| `poll_until_status(timeout=5.0) -> Status \| None` | Poll until Status or timeout |
+| `poll(timeout=None) -> Message` | Wait for one message; raises `TimeoutError`, or `ConnectionError` if the spa hangs up |
+| `poll_until_status(timeout=5.0) -> Status \| None` | Next Status received, or `None` on timeout (never an old one) |
+| `wait_for_status(predicate, timeout=5.0) -> Status \| None` | First new Status for which `predicate(status)` is true |
+| `request_control_info()` | Ask for control configuration |
 | `messages_pending() -> bool` | True if data is waiting to be read |
 | `drain()` | Discard all currently pending messages |
 | `send(msg: Message)` | Send any message |
@@ -244,7 +253,7 @@ Discovery uses a **UDP broadcast** to port 30303.  Balboa devices respond
 with their hostname and MAC address; the MAC prefix `00-15-27` identifies
 genuine Balboa hardware.
 
-See `bwa/doc/protocol.md` (in the `balboa_worldwide_app` Ruby repo) for the
+See `doc/protocol.md` in the `balboa_worldwide_app` Ruby repository for the
 full wire-level specification.
 
 ---
@@ -254,14 +263,14 @@ full wire-level specification.
 ```bash
 # Unit tests (no hardware required — uses a simulated server)
 cd operator/
-python3 -m unittest tests/test_crc.py tests/test_message.py -v
+python3 -m unittest discover -s tests -p "test_[cm]*.py"
 
 # Live integration tests (requires a real spa on the network)
 python3 -m unittest tests/test_live.py -v
 ```
 
 The live tests will auto-discover the spa via UDP.  If discovery is unreliable,
-set `SPA_IP` at the top of `tests/test_live.py` to the known IP address.
+set the `HOTTUB_SPA_IP` environment variable to the known IP address.
 
 The live tests make small changes (toggling lights, adjusting the set-point by
 a degree or two) and restore everything to its original state afterwards.

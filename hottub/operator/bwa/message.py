@@ -14,12 +14,41 @@ from typing import ClassVar
 from . import crc as _crc
 
 FRAME_START = FRAME_END = 0x7E
+MIN_LENGTH = 5  # L for a message with an empty payload
 
 
 class InvalidMessage(Exception):
     def __init__(self, reason: str, raw: bytes):
         super().__init__(reason)
         self.raw = raw
+
+
+def build_frame(message_type: bytes, payload: bytes = b"") -> bytes:
+    """Wrap a 3-byte message type and payload in length, CRC and delimiters."""
+    inner = bytes([len(payload) + MIN_LENGTH]) + message_type + payload
+    return bytes([FRAME_START]) + inner + bytes([_crc.checksum(inner), FRAME_END])
+
+
+def split_frames(buf: bytes) -> tuple[list[bytes], bytes]:
+    """Split a receive buffer into complete frames plus the unconsumed tail.
+
+    Bytes that cannot be the start of a frame are skipped, so a reader that
+    has lost alignment (for example after a corrupt frame) finds the next
+    frame start instead of treating an end delimiter as a start.
+    """
+    frames = []
+    while len(buf) >= 2:
+        # A length byte of 0x7e means we are looking at the previous frame's
+        # end delimiter followed by the next frame's start.
+        if buf[0] != FRAME_START or buf[1] < MIN_LENGTH or buf[1] == FRAME_START:
+            buf = buf[1:]
+            continue
+        total = buf[1] + 2
+        if len(buf) < total:
+            break
+        frames.append(buf[:total])
+        buf = buf[total:]
+    return frames, buf
 
 
 class Message:
@@ -33,17 +62,13 @@ class Message:
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
-        if hasattr(cls, "MESSAGE_TYPE"):
+        if "MESSAGE_TYPE" in cls.__dict__:
             Message._registry[cls.MESSAGE_TYPE] = cls
-
-    # ------------------------------------------------------------------
-    # Parsing
-    # ------------------------------------------------------------------
 
     @classmethod
     def parse(cls, frame: bytes) -> "Message":
         """Parse a complete wire frame and return the appropriate Message subclass."""
-        if len(frame) < 2:
+        if len(frame) < MIN_LENGTH + 2:
             raise InvalidMessage("Frame too short", frame)
         if frame[0] != FRAME_START or frame[-1] != FRAME_END:
             raise InvalidMessage("Missing frame delimiters", frame)
@@ -64,9 +89,7 @@ class Message:
         msg_type = bytes(frame[2:5])
         subcls = cls._registry.get(msg_type)
         if subcls is None:
-            raise InvalidMessage(
-                f"Unknown message type {msg_type.hex()}", frame
-            )
+            raise InvalidMessage(f"Unknown message type {msg_type.hex()}", frame)
 
         payload = bytes(frame[5:-2])
         if len(payload) != subcls.MESSAGE_LENGTH:
@@ -84,56 +107,13 @@ class Message:
     def _parse(self, payload: bytes) -> None:
         """Subclasses override to decode the payload bytes."""
 
-    # ------------------------------------------------------------------
-    # Serialisation
-    # ------------------------------------------------------------------
-
     def _serialize_payload(self) -> bytes:
         """Subclasses override to encode to payload bytes."""
         return b""
 
     def to_bytes(self) -> bytes:
         """Encode this message to a complete wire frame."""
-        payload = self._serialize_payload()
-        L = len(payload) + 5
-        inner = bytes([L]) + self.MESSAGE_TYPE + payload
-        checksum = _crc.checksum(inner)
-        return bytes([FRAME_START]) + inner + bytes([checksum, FRAME_END])
-
-    # ------------------------------------------------------------------
-    # Stream reading helper
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def read_frame(sock) -> bytes:
-        """Read exactly one complete BWA frame from a socket.
-
-        Blocks until a full frame is available.  Raises InvalidMessage if
-        the sync byte is wrong or the socket closes mid-frame.
-        """
-        # Read start delimiter + length byte
-        header = _recv_exactly(sock, 2)
-        if not header:
-            raise ConnectionError("Socket closed")
-        if header[0] != FRAME_START:
-            raise InvalidMessage(f"Expected frame start 0x7e, got {header[0]:#04x}", header)
-        L = header[1]
-        # Read remaining L bytes (type + payload + crc + end delimiter)
-        rest = _recv_exactly(sock, L)
-        if not rest:
-            raise ConnectionError("Socket closed mid-frame")
-        return header + rest
+        return build_frame(self.MESSAGE_TYPE, self._serialize_payload())
 
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__}>"
-
-
-def _recv_exactly(sock, n: int) -> bytes:
-    """Read exactly n bytes from sock, returning b'' on clean close."""
-    buf = b""
-    while len(buf) < n:
-        chunk = sock.recv(n - len(buf))
-        if not chunk:
-            return b""
-        buf += chunk
-    return buf

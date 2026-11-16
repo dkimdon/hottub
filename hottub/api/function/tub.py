@@ -1,0 +1,306 @@
+"""Tub state: what users want the tub to do, and what the operator reports.
+
+Everything lives in one DynamoDB item (id = "tub").
+
+Desired state — what the tub should be doing.  Stored as the three tub
+controls, exactly as the tub itself represents them:
+
+  desired_heating_mode       "ready" | "rest"
+  desired_temperature_range  "high" | "low"
+  desired_set_temperature    integer °F
+  desired_version            integer, incremented on every change
+  setpoint_changed_at        ISO-8601 UTC
+  setpoint_source            "ui" | "panel" | "schedule"
+  setpoint_changed_by        email of the user (source "ui" only)
+
+The most recent change wins, wherever it was made:
+  * a user picks a setpoint in the web UI                    (source "ui")
+  * someone presses buttons on the tub's front panel; the
+    operator notices and reports the tub's new state         (source "panel")
+  * the nightly automatic turn-off                           (source "schedule")
+
+Reported state — written by the operator:
+
+  current_temperature      °F, last value the tub reported
+  temperature_measured_at  when that value was read
+  tub_set_temperature, tub_heating_mode, tub_temperature_range, tub_heating
+  tub_last_seen_at         last time the operator reached the tub
+  operator_last_seen_at    last time the operator reached this API
+"""
+
+import os
+from decimal import Decimal
+
+import boto3
+from botocore.exceptions import ClientError
+
+import history
+from common import ApiError, json_body, now, respond
+
+TABLE = boto3.resource("dynamodb").Table(os.environ["TABLE_NAME"])
+KEY = {"id": "tub"}
+
+SETPOINT_TEMPERATURES = range(102, 107)
+ALLOWED_SETPOINTS = ["off"] + [str(t) for t in SETPOINT_TEMPERATURES]
+
+# "Off" is rest mode in the low range at its minimum, so that the tub does
+# not heat during filter cycles either.
+OFF = {"heating_mode": "rest", "temperature_range": "low", "set_temperature": 50}
+
+HEATING_MODES = {"ready", "rest", "ready_in_rest"}
+TEMPERATURE_RANGES = {"high", "low"}
+
+
+# ---------------------------------------------------------------------------
+# Routes for users
+# ---------------------------------------------------------------------------
+
+def get_tub(event, user):
+    item = _read()
+    return respond(200, {
+        "setpoint": _setpoint(_desired(item)),
+        "setpoint_changed_at": item.get("setpoint_changed_at"),
+        "setpoint_changed_by": item.get("setpoint_changed_by"),
+        "setpoint_source": item.get("setpoint_source"),
+        "current_temperature": item.get("current_temperature"),
+        "temperature_measured_at": item.get("temperature_measured_at"),
+        "heating": item.get("tub_heating"),
+        "tub_last_seen_at": item.get("tub_last_seen_at"),
+        "operator_last_seen_at": item.get("operator_last_seen_at"),
+        "allowed_setpoints": ALLOWED_SETPOINTS,
+    })
+
+
+def put_setpoint(event, user):
+    raw = json_body(event).get("setpoint")
+    # Accept 104 or "104"; reject true, 104.5 and anything else.
+    if isinstance(raw, int) and not isinstance(raw, bool):
+        raw = str(raw)
+    if raw not in ALLOWED_SETPOINTS:
+        raise ApiError(400, "setpoint must be 'off' or a whole number from 102 to 106")
+
+    if raw == "off":
+        desired = OFF
+    else:
+        desired = {"heating_mode": "ready", "temperature_range": "high", "set_temperature": int(raw)}
+
+    changed_at = _set_desired(desired, source="ui", changed_by=user["email"])
+    return respond(200, {
+        "setpoint": raw,
+        "setpoint_changed_at": changed_at,
+        "setpoint_changed_by": user["email"],
+        "setpoint_source": "ui",
+    })
+
+
+# ---------------------------------------------------------------------------
+# Routes for the operator
+# ---------------------------------------------------------------------------
+
+def get_desired(event, user):
+    return respond(200, _desired_response(_read()))
+
+
+def put_report(event, user):
+    """Record what the operator saw.
+
+    Body:
+      tub             null if the operator could not reach the tub, else
+                        {current_temperature, set_temperature, heating_mode,
+                         temperature_range, heating}
+      panel_change    true if the tub's controls were changed at the front
+                      panel since the operator last looked
+      desired_version the desired_version the operator last read (required
+                      with panel_change)
+
+    A panel change becomes the new desired state — unless a user changed the
+    setpoint after the operator read it (desired_version no longer matches),
+    in which case the user's newer change stands and "adopted" is false.
+    The response always carries the current desired state.
+    """
+    body = json_body(event)
+    tub = body.get("tub")
+    reported_at = now()
+    updates = {"operator_last_seen_at": reported_at}
+
+    if tub is not None:
+        tub = _validate_tub(tub)
+        updates.update({
+            "tub_last_seen_at": reported_at,
+            "tub_set_temperature": tub["set_temperature"],
+            "tub_heating_mode": tub["heating_mode"],
+            "tub_temperature_range": tub["temperature_range"],
+            "tub_heating": tub["heating"],
+        })
+        # The tub stops reporting a temperature after a while at rest; keep
+        # the last real reading (and its timestamp) rather than erase it.
+        if tub["current_temperature"] is not None:
+            updates["current_temperature"] = tub["current_temperature"]
+            updates["temperature_measured_at"] = reported_at
+            history.record_temperature(reported_at, tub["current_temperature"], tub["heating"])
+
+    TABLE.update_item(
+        Key=KEY,
+        UpdateExpression="SET " + ", ".join(f"{name} = :{name}" for name in updates),
+        ExpressionAttributeValues={f":{name}": value for name, value in updates.items()},
+    )
+
+    adopted = False
+    if body.get("panel_change") is True:
+        if tub is None:
+            raise ApiError(400, "'panel_change' requires 'tub'")
+        seen = body.get("desired_version")
+        if seen is not None and (not isinstance(seen, int) or isinstance(seen, bool)):
+            raise ApiError(400, "'desired_version' must be an integer or null")
+        panel = {
+            "heating_mode": "ready" if tub["heating_mode"] == "ready" else "rest",
+            "temperature_range": tub["temperature_range"],
+            "set_temperature": tub["set_temperature"],
+        }
+        try:
+            _set_desired(panel, source="panel", changed_by=None, only_if_version=seen)
+            adopted = True
+        except ClientError as e:
+            if e.response["Error"]["Code"] != "ConditionalCheckFailedException":
+                raise
+
+    return respond(200, {
+        "reported_at": reported_at,
+        "adopted": adopted,
+        **_desired_response(_read()),
+    })
+
+
+# ---------------------------------------------------------------------------
+# Scheduled turn-off
+# ---------------------------------------------------------------------------
+
+def auto_off():
+    """Turn the tub off unless it already is.  Invoked by the nightly schedule."""
+    desired = _desired(_read())
+    if desired is None or desired["heating_mode"] != "ready":
+        return {"changed": False}
+    _set_desired(OFF, source="schedule", changed_by=None)
+    print("Automatic turn-off: tub was on, now set to off")
+    return {"changed": True}
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _read() -> dict:
+    return TABLE.get_item(Key=KEY, ConsistentRead=True).get("Item", {})
+
+
+def _desired(item: dict):
+    if "desired_version" not in item:
+        return None
+    return {
+        "heating_mode": item["desired_heating_mode"],
+        "temperature_range": item["desired_temperature_range"],
+        "set_temperature": int(item["desired_set_temperature"]),
+    }
+
+
+def _desired_response(item: dict) -> dict:
+    version = item.get("desired_version")
+    return {
+        "desired": _desired(item),
+        "desired_version": None if version is None else int(version),
+    }
+
+
+def _setpoint(desired):
+    """The setpoint as users see it: "off", or the temperature as a string."""
+    if desired is None:
+        return None
+    if desired["heating_mode"] != "ready":
+        return "off"
+    return str(desired["set_temperature"])
+
+
+_ANY = object()
+
+
+def _set_desired(desired: dict, source: str, changed_by, only_if_version=_ANY) -> str:
+    """Write a new desired state and return its timestamp.
+
+    only_if_version, if given, is the desired_version the caller last saw
+    (None = no desired state existed yet).  The write then only happens if
+    that is still the current version; otherwise DynamoDB raises
+    ConditionalCheckFailedException.
+    """
+    changed_at = now()
+    names = {"#by": "setpoint_changed_by"}
+    values = {
+        ":mode": desired["heating_mode"],
+        ":range": desired["temperature_range"],
+        ":temp": desired["set_temperature"],
+        ":at": changed_at,
+        ":source": source,
+        ":one": 1,
+    }
+    expression = (
+        "SET desired_heating_mode = :mode, desired_temperature_range = :range, "
+        "desired_set_temperature = :temp, setpoint_changed_at = :at, "
+        "setpoint_source = :source"
+    )
+    if changed_by is None:
+        expression += " REMOVE #by"
+    else:
+        expression += ", #by = :by"
+        values[":by"] = changed_by
+    expression += " ADD desired_version :one"
+
+    kwargs = {}
+    if only_if_version is None:
+        kwargs["ConditionExpression"] = "attribute_not_exists(desired_version)"
+    elif only_if_version is not _ANY:
+        kwargs["ConditionExpression"] = "desired_version = :seen"
+        values[":seen"] = only_if_version
+
+    TABLE.update_item(
+        Key=KEY,
+        UpdateExpression=expression,
+        ExpressionAttributeNames=names,
+        ExpressionAttributeValues=values,
+        **kwargs,
+    )
+    history.record_change(changed_at, _setpoint(desired), source, changed_by)
+    return changed_at
+
+
+def _validate_tub(tub) -> dict:
+    if not isinstance(tub, dict):
+        raise ApiError(400, "'tub' must be an object or null")
+
+    current = tub.get("current_temperature")
+    if current is not None:
+        if not _is_number(current) or not 32 <= current <= 130:
+            raise ApiError(400, "'current_temperature' must be a number from 32 to 130, or null")
+        current = Decimal(str(current))
+
+    set_temperature = tub.get("set_temperature")
+    if not _is_number(set_temperature) or set_temperature != int(set_temperature) \
+            or not 40 <= set_temperature <= 110:
+        raise ApiError(400, "'set_temperature' must be a whole number from 40 to 110")
+
+    if tub.get("heating_mode") not in HEATING_MODES:
+        raise ApiError(400, "'heating_mode' must be ready, rest or ready_in_rest")
+    if tub.get("temperature_range") not in TEMPERATURE_RANGES:
+        raise ApiError(400, "'temperature_range' must be high or low")
+    if not isinstance(tub.get("heating"), bool):
+        raise ApiError(400, "'heating' must be true or false")
+
+    return {
+        "current_temperature": current,
+        "set_temperature": int(set_temperature),
+        "heating_mode": tub["heating_mode"],
+        "temperature_range": tub["temperature_range"],
+        "heating": tub["heating"],
+    }
+
+
+def _is_number(value) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
