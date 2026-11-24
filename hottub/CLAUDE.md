@@ -88,7 +88,7 @@ cd ui && npm test
 ```
 
 To see the UI without AWS: `npm run dev` in `ui/`, then open
-`http://localhost:5173/preview.html` (made-up data).
+`http://localhost:5174/preview.html` (made-up data).
 
 `operator/tests/test_live.py` talks to the real tub and changes its settings;
 run it only on request.

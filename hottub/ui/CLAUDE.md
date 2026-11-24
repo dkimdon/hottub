@@ -31,7 +31,7 @@ src/ui.test.jsx      component tests (vitest + Testing Library)
 npm install
 npm test          # component tests, no network
 npm run build     # production build into dist/
-npm run dev       # local dev server on http://localhost:5173
+npm run dev       # local dev server on http://localhost:5174
 ```
 
 For `npm run dev`, first run `python ../scripts/deploy.py ui-config test`, which
