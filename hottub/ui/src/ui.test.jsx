@@ -57,39 +57,42 @@ describe("TubPanel", () => {
     expect(screen.getByText("heating")).toBeTruthy();
     expect(screen.getByText(/set to heat to or maintain 104 °F/)).toBeTruthy();
     expect(screen.getByText(/last change was made by pat@example.com, 10 minutes ago/)).toBeTruthy();
-    expect(screen.getByLabelText("104 °F").checked).toBe(true);
     expect(screen.queryByRole("alert")).toBeNull();
 
-    const labels = screen.getAllByRole("radio").map((r) => r.value);
-    expect(labels).toEqual(["106", "105", "104", "103", "102", "off"]);
+    // The controls start from the current request, so "Set" has nothing to do.
+    expect(screen.getByLabelText("Have it at").value).toBe("104");
+    expect(screen.getByLabelText("by").value).toBe("asap");
+    expect(screen.getByText("Set").disabled).toBe(true);
+    const temperatures = [...screen.getByLabelText("Have it at").options].map((o) => o.value);
+    expect(temperatures).toEqual(["102", "103", "104", "105", "106"]);
+    expect(screen.getByText("Turn off")).toBeTruthy();
   });
 
-  it("sends a new setpoint and shows it", async () => {
-    api.getTub.mockResolvedValue(tubState());
-    api.setSetpoint.mockResolvedValue({
-      setpoint: "106",
-      setpoint_changed_at: new Date().toISOString(),
-      setpoint_changed_by: "me@example.com",
-      setpoint_source: "ui",
-    });
+  it("heats to a new temperature as soon as possible", async () => {
+    api.getTub.mockResolvedValueOnce(tubState()).mockResolvedValue(
+      tubState({ setpoint: "106", setpoint_changed_by: "me@example.com", setpoint_changed_at: minutesAgo(0) })
+    );
+    api.setSetpoint.mockResolvedValue({});
     render(<TubPanel />);
 
-    await userEvent.click(await screen.findByLabelText("106 °F"));
+    await userEvent.selectOptions(await screen.findByLabelText("Have it at"), "106");
+    await userEvent.click(screen.getByText("Set"));
 
     expect(api.setSetpoint).toHaveBeenCalledWith("106");
-    await waitFor(() => expect(screen.getByLabelText("106 °F").checked).toBe(true));
-    expect(screen.getByText(/last change was made by me@example.com/)).toBeTruthy();
+    expect(await screen.findByText(/last change was made by me@example.com/)).toBeTruthy();
+    expect(screen.getByLabelText("Have it at").value).toBe("106");
   });
 
   it("can turn the tub off", async () => {
-    api.getTub.mockResolvedValue(tubState());
-    api.setSetpoint.mockResolvedValue({ setpoint: "off", setpoint_source: "ui" });
+    api.getTub.mockResolvedValueOnce(tubState()).mockResolvedValue(tubState({ setpoint: "off", heating: false }));
+    api.setSetpoint.mockResolvedValue({});
     render(<TubPanel />);
 
-    await userEvent.click(await screen.findByLabelText("Rest (off)"));
+    await userEvent.click(await screen.findByText("Turn off"));
 
     expect(api.setSetpoint).toHaveBeenCalledWith("off");
     expect(await screen.findByText("The tub is at rest (off).")).toBeTruthy();
+    expect(screen.queryByText("Turn off")).toBeNull();
   });
 
   it("shows a failed change and keeps the old setpoint", async () => {
@@ -97,13 +100,14 @@ describe("TubPanel", () => {
     api.setSetpoint.mockRejectedValue(new Error("Could not reach the server."));
     render(<TubPanel />);
 
-    await userEvent.click(await screen.findByLabelText("106 °F"));
+    await userEvent.selectOptions(await screen.findByLabelText("Have it at"), "106");
+    await userEvent.click(screen.getByText("Set"));
 
     expect((await screen.findByRole("alert")).textContent).toMatch(/Could not reach the server/);
-    expect(screen.getByLabelText("104 °F").checked).toBe(true);
+    expect(screen.getByText(/set to heat to or maintain 104 °F/)).toBeTruthy();
   });
 
-  it("describes a change made at the tub, with no button selected", async () => {
+  it("describes a change made at the tub", async () => {
     api.getTub.mockResolvedValue(
       tubState({ setpoint: "100", setpoint_source: "panel", setpoint_changed_by: null })
     );
@@ -111,7 +115,9 @@ describe("TubPanel", () => {
 
     expect(await screen.findByText(/buttons on the tub itself/)).toBeTruthy();
     expect(screen.getByText(/maintain 100 °F/)).toBeTruthy();
-    expect(screen.getAllByRole("radio").some((r) => r.checked)).toBe(false);
+    // 100 is not offered, so the controls offer the usual 104 instead.
+    expect(screen.getByLabelText("Have it at").value).toBe("104");
+    expect(screen.getByText("Set").disabled).toBe(false);
   });
 
   it("describes the automatic turn-off", async () => {

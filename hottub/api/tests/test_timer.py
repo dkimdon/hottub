@@ -93,6 +93,46 @@ class TestSettingTimers(TimerTestCase):
         self.assertEqual(self.call("DELETE /tub/timer", user=self.alice)[0], 200)  # harmless twice
 
 
+class TestOneRequestAtATime(TimerTestCase):
+
+    def test_setting_a_timer_turns_the_tub_off_until_then(self):
+        self.report(tub={"current_temperature": 100})
+        self.call("PUT /tub/setpoint", {"setpoint": 104}, user=self.alice)
+        self.set_timer(105, in_minutes(600))
+        state = self.state()
+        self.assertEqual(state["setpoint"], "off")
+        self.assertEqual((state["setpoint_source"], state["setpoint_changed_by"]), ("ui", "bob@example.com"))
+        self.assertEqual(state["timer"]["setpoint"], "105")
+        self.assertIsNotNone(state["timer"]["set_at"])
+
+    def test_heating_now_cancels_the_timer(self):
+        self.set_timer(104, in_minutes(600))
+        self.call("PUT /tub/setpoint", {"setpoint": 102}, user=self.alice)
+        state = self.state()
+        self.assertEqual(state["setpoint"], "102")
+        self.assertIsNone(state["timer"])
+
+    def test_turning_off_cancels_the_timer(self):
+        self.set_timer(104, in_minutes(600))
+        self.call("PUT /tub/setpoint", {"setpoint": "off"}, user=self.alice)
+        self.assertIsNone(self.state()["timer"])
+
+    def test_a_change_at_the_panel_cancels_the_timer(self):
+        self.report(tub={"current_temperature": 100})
+        self.set_timer(104, in_minutes(600))
+        version = self.desired()["desired_version"]
+        self.report(tub={"set_temperature": 103}, panel_change=True, desired_version=version)
+        state = self.state()
+        self.assertEqual((state["setpoint"], state["setpoint_source"]), ("103", "panel"))
+        self.assertIsNone(state["timer"])
+
+    def test_the_nightly_turn_off_keeps_the_timer(self):
+        self.report(tub={"current_temperature": 100})
+        self.set_timer(104, in_minutes(600))
+        self.handler({"source": "hottub.schedule"}, None)
+        self.assertIsNotNone(self.state()["timer"])
+
+
 class TestTimerStartsHeating(TimerTestCase):
 
     def test_waits_until_it_is_time(self):

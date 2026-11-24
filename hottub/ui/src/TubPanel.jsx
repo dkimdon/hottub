@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { getTub, setSetpoint } from "./api";
+import { cancelTimer, getTub, setSetpoint } from "./api";
 import { aboutWhen, ago, secondsSince } from "./format";
-import ReadyBy from "./ReadyBy";
+import HeatControl from "./HeatControl";
 import Thermometer from "./Thermometer";
 
 const REFRESH_MS = 30_000;
@@ -13,7 +13,23 @@ function setpointSentence(setpoint) {
   return `The tub is set to heat to or maintain ${setpoint} °F.`;
 }
 
+// "The tub is off until about 5:20 PM, then heats to 104 °F to be ready by
+// 7:00 PM."
+function timerSentence(timer, now) {
+  const target = `${timer.setpoint} °F`;
+  const ready = aboutWhen(timer.ready_at, now);
+  if (!timer.starts_at) return `The tub will be at ${target} by ${ready}.`;
+  if (Date.parse(timer.starts_at) <= now) {
+    return `Heating starts in the next few minutes, to reach ${target} by ${ready}.`;
+  }
+  return `The tub is off until about ${aboutWhen(timer.starts_at, now)}, then heats to ${target} to be ready by ${ready}.`;
+}
+
 function changedBySentence(tub, now) {
+  if (tub.timer) {
+    const who = tub.timer.set_by || "someone";
+    return tub.timer.set_at ? `The timer was set by ${who}, ${ago(tub.timer.set_at, now)}.` : `The timer was set by ${who}.`;
+  }
   if (!tub.setpoint_changed_at) return null;
   const who = {
     ui: tub.setpoint_changed_by || "someone using this page",
@@ -68,7 +84,7 @@ export default function TubPanel({ onTub }) {
     if (onTub) onTub(tub);
   }, [tub, onTub]);
   const [error, setError] = useState(null);
-  const [saving, setSaving] = useState(null);
+  const [saving, setSaving] = useState(false);
   const [now, setNow] = useState(Date.now());
 
   const refresh = useCallback(async () => {
@@ -93,18 +109,16 @@ export default function TubPanel({ onTub }) {
     };
   }, [refresh]);
 
-  async function choose(setpoint) {
-    setSaving(setpoint);
+  // "Turn off" and "Cancel timer"; then show the new state.
+  async function act(action) {
+    setSaving(true);
     try {
-      const change = await setSetpoint(setpoint);
-      // The estimate was for the old setpoint; the next refresh brings a new one.
-      setTub((current) => ({ ...current, ...change, heating_estimate: null }));
-      setError(null);
+      await action();
+      await refresh();
     } catch (e) {
       setError(e.message);
     }
-    setSaving(null);
-    setNow(Date.now());
+    setSaving(false);
   }
 
   if (!tub) {
@@ -115,10 +129,7 @@ export default function TubPanel({ onTub }) {
   const problem = warning(tub, now);
   const changedBy = changedBySentence(tub, now);
   const ready = problem ? null : readySentence(tub, now);
-  // Highest temperature first, "off" last, as on the old page.
-  const choices = [...tub.allowed_setpoints].sort((a, b) =>
-    a === "off" ? 1 : b === "off" ? -1 : Number(b) - Number(a)
-  );
+  const heatingNow = tub.setpoint && tub.setpoint !== "off";
 
   return (
     <>
@@ -139,32 +150,35 @@ export default function TubPanel({ onTub }) {
                 ? `The water temperature was last measured ${ago(tub.temperature_measured_at, now)}.`
                 : "The water temperature has not been measured yet."}
             </li>
-            <li>{setpointSentence(tub.setpoint)}</li>
+            <li>{tub.timer ? timerSentence(tub.timer, now) : setpointSentence(tub.setpoint)}</li>
             {ready && <li>{ready}</li>}
             {changedBy && <li>{changedBy}</li>}
           </ul>
+          {tub.timer ? (
+            <button type="button" disabled={saving} onClick={() => act(cancelTimer)}>
+              Cancel timer
+            </button>
+          ) : (
+            heatingNow && (
+              <button type="button" disabled={saving} onClick={() => act(() => setSetpoint("off"))}>
+                Turn off
+              </button>
+            )
+          )}
         </div>
       </section>
 
       {problem && <p className="error" role="alert">{problem}</p>}
       {error && <p className="error" role="alert">{error}</p>}
 
-      <fieldset className="setpoints" disabled={saving !== null}>
-        <legend>Set the tub to</legend>
-        {choices.map((choice) => (
-          <label key={choice} className={saving === choice ? "saving" : undefined}>
-            <input
-              type="radio"
-              name="setpoint"
-              value={choice}
-              checked={tub.setpoint === choice}
-              onChange={() => choose(choice)}
-            />
-            <span>{choice === "off" ? "Rest (off)" : `${choice} °F`}</span>
-          </label>
-        ))}
-      </fieldset>
-      <ReadyBy tub={tub} now={now} onTimer={(timer) => setTub((current) => ({ ...current, timer }))} />
+      {/* Keyed by the current request, so the controls start from it again
+          whenever it changes. */}
+      <HeatControl
+        key={`${tub.setpoint}|${tub.timer ? `${tub.timer.setpoint}@${tub.timer.ready_at}` : ""}`}
+        tub={tub}
+        now={now}
+        onChanged={refresh}
+      />
       <p className="hint">
         Changes reach the tub within a few minutes. The tub turns off automatically at midnight.
       </p>

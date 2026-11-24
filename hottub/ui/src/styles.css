@@ -292,51 +292,48 @@ input[type="radio"] {
   stroke-width: 1;
 }
 
-/* ---------- Ready by (timer) ---------- */
+/* ---------- Heat control: "Have it at [104] by [time] [Set]" ---------- */
 
-.ready-by {
+.heat-control {
   display: flex;
   flex-direction: column;
   gap: 8px;
   margin: 4px 0 12px;
-  padding-top: 12px;
+  padding-top: 14px;
   border-top: 1px solid var(--border);
 }
 
-.ready-by p {
+.heat-control p {
   margin: 0;
 }
 
-.ready-by-title {
-  font-weight: 600;
-}
-
-.ready-by-row {
+.heat-control-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 10px;
+  gap: 10px 12px;
 }
 
-.ready-by-row label {
+.heat-control-row label {
   display: flex;
   align-items: center;
   gap: 8px;
+  font-weight: 600;
 }
 
-.ready-by select,
-.ready-by input[type="time"] {
+.heat-control select {
   font: inherit;
+  font-weight: 400;
   color: var(--text);
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 8px 10px;
-  width: auto;
 }
 
-.ready-by button {
-  align-self: flex-start;
+/* "Turn off" / "Cancel timer", under the status lines. */
+.tub-status button {
+  margin-top: 4px;
 }
 
 .visually-hidden {
@@ -382,43 +379,6 @@ input[type="radio"] {
 .thermometer-label {
   fill: var(--muted);
   font-size: 11px;
-}
-
-.setpoints {
-  border: none;
-  margin: 0 0 12px;
-  padding: 0;
-  display: grid;
-  justify-items: start;
-  gap: 2px;
-}
-
-.setpoints legend {
-  font-weight: 600;
-  padding: 0;
-  margin-bottom: 4px;
-}
-
-/* Plain radio buttons, no boxes.  The vertical padding keeps each one an
-   easy target for a finger. */
-.setpoints label {
-  display: flex;
-  align-items: center;
-  padding: 6px 0;
-  cursor: pointer;
-  font-size: 1.1rem;
-}
-
-.setpoints label:has(input:checked) {
-  font-weight: 600;
-}
-
-.setpoints label.saving {
-  opacity: 0.6;
-}
-
-.setpoints:disabled label {
-  cursor: default;
 }
 
 /* ---------- History ---------- */

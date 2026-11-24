@@ -151,6 +151,7 @@ def put_setpoint(event, user):
         desired = {"heating_mode": "ready", "temperature_range": "high", "set_temperature": int(raw)}
 
     changed_at = _set_desired(desired, source="ui", changed_by=user["email"])
+    _remove_timer()  # one request at a time: this replaces any timer
     return respond(200, {
         "setpoint": raw,
         "setpoint_changed_at": changed_at,
@@ -172,7 +173,11 @@ def put_setpoint(event, user):
 # start is checked whenever the operator asks for the desired state, every
 # couple of minutes, so no extra scheduler is needed.  Starting the heating is
 # an ordinary change of desired state (source "timer", by the person who set
-# the timer); the most recent change still wins.  The timer is then removed.
+# the timer), and the timer is then removed.
+#
+# There is one request at a time, "heat now" or "heat by then": setting a
+# timer turns the tub off until the timer starts it, and a setpoint chosen in
+# the UI or at the tub's panel removes the timer.
 # A timer never starts the heating during the nightly turn-off hour.
 
 TIMER_MAX_HOURS = 48
@@ -211,13 +216,21 @@ def put_timer(event, user):
         },
     )
     print(f"{user['email']} set a timer: {raw} °F by {ready_at.strftime(_ISO)}")
+    # One request at a time: the tub rests until the timer starts it.
+    desired = _desired(_read())
+    if desired is not None and desired["heating_mode"] == "ready":
+        _set_desired(OFF, source="ui", changed_by=user["email"])
     return respond(200, {"timer": _timer_view(_read(), now_dt)})
 
 
 def delete_timer(event, user):
-    TABLE.update_item(Key=KEY, UpdateExpression="REMOVE " + ", ".join(_TIMER_FIELDS))
+    _remove_timer()
     print(f"{user['email']} cancelled the timer")
     return respond(200, {"timer": None})
+
+
+def _remove_timer():
+    TABLE.update_item(Key=KEY, UpdateExpression="REMOVE " + ", ".join(_TIMER_FIELDS))
 
 
 def _timer_view(item: dict, now_dt):
@@ -233,6 +246,7 @@ def _timer_view(item: dict, now_dt):
         "setpoint": str(int(item["timer_setpoint"])),
         "ready_at": item["timer_ready_at"],
         "set_by": item.get("timer_set_by"),
+        "set_at": item.get("timer_set_at"),
         "starts_at": starts_at,
     }
 
@@ -399,6 +413,7 @@ def put_report(event, user):
         try:
             _set_desired(panel, source="panel", changed_by=None, only_if_version=seen)
             adopted = True
+            _remove_timer()  # one request at a time, as for a change in the UI
         except ClientError as e:
             if e.response["Error"]["Code"] != "ConditionalCheckFailedException":
                 raise

@@ -74,7 +74,9 @@ setpoint in between, the user's change stands and the response says
 heating when `GET /operator/desired` is called at or after the computed start
 time (ready time minus heating time minus 20 minutes), so no extra scheduler
 is needed; the change has source `"timer"`.  It never starts during the
-midnight turn-off hour.  See "Timer" in `function/tub.py`.
+midnight turn-off hour.  One request at a time: setting a timer turns the
+tub off until then, and a setpoint from the UI or the tub's panel removes the
+timer (the nightly turn-off does not).  See "Timer" in `function/tub.py`.
 
 The nightly turn-off is an EventBridge schedule that invokes the same Lambda
 with `{"source": "hottub.schedule"}`.

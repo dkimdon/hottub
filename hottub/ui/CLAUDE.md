@@ -9,8 +9,8 @@ Keep it that way unless there is a strong reason.
 ```
 src/App.jsx          start-up, signed-in shell, Tub / Users tabs
 src/SignIn.jsx       sign in, first-time password, forgotten password
-src/TubPanel.jsx     temperature, status lines, setpoint buttons
-src/ReadyBy.jsx      "have it ready by": set or cancel the shared timer
+src/TubPanel.jsx     temperature, status lines, Turn off / Cancel timer
+src/HeatControl.jsx  "Have it at [104] by [as soon as possible / a time]"
 src/HistoryPanel.jsx      period buttons, graph, table of changes
 src/TemperatureChart.jsx  the graph: hand-written SVG, no chart library
 src/UsersPanel.jsx   admin-only user management
@@ -24,7 +24,7 @@ src/api.js           the only file that calls the API
 src/format.js        "5 minutes ago"
 src/styles.css       all styling; light and dark from the system setting
 src/ui.test.jsx      component tests (vitest + Testing Library)
-src/features.test.jsx  thermometer marker/bubbles, forecast, stats, timer
+src/features.test.jsx  thermometer marker/bubbles, forecast, stats, heat control timer
 public/              icons (drawn by ../scripts/make_icons.py) and
                      manifest.json, for the browser tab and "Add to Home Screen"
 ```
@@ -62,6 +62,10 @@ Deploy with `python ../scripts/deploy.py ui test`.
   container's real pixel width, breaks where readings are missing, labels only
   the latest value, and shows other values on hover, touch or the arrow keys.
   The same readings are available as a table below it.
+- One request at a time: "as soon as possible" sets the setpoint (and the
+  API drops any timer); a time sets the shared timer (and the API turns the
+  tub off until the timer starts it).  The controls start from the current
+  request, keyed on it so they reset when it changes.
 - Users cannot register themselves.  An admin adds them; Cognito emails a
   temporary password; the first sign-in forces a new password.
 

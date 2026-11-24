@@ -1,5 +1,5 @@
 // Tests for the thermometer's setpoint marker and bubbles, the graph's
-// forecast and stats, and the "ready by" timer.
+// forecast and stats, and the heat control's timer.
 
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import * as api from "./api";
 import HistoryPanel from "./HistoryPanel";
-import { nextOccurrence } from "./ReadyBy";
+import { timeChoices } from "./HeatControl";
 import Thermometer from "./Thermometer";
 import TubPanel from "./TubPanel";
 
@@ -112,54 +112,60 @@ describe("Graph forecast and stats", () => {
   });
 });
 
-describe("Ready by", () => {
-  it("picks today or tomorrow", () => {
-    const now = new Date(2026, 10, 23, 18, 0);
-    expect(nextOccurrence("19:00", now)).toEqual(new Date(2026, 10, 23, 19, 0));
-    expect(nextOccurrence("18:05", now)).toEqual(new Date(2026, 10, 24, 18, 5));
-    expect(nextOccurrence("07:30", now)).toEqual(new Date(2026, 10, 24, 7, 30));
+describe("Heat control with a time", () => {
+  it("offers half-hour times over the next day, skipping the midnight hour", () => {
+    const now = new Date(2026, 10, 23, 18, 0).getTime();
+    const choices = timeChoices(now);
+    const first = new Date(choices[0][0]);
+    expect([first.getHours(), first.getMinutes()]).toEqual([18, 30]);
+    expect(choices.some(([iso]) => new Date(iso).getHours() === 0)).toBe(false);
+    expect(choices.some(([, label]) => label.startsWith("tomorrow at"))).toBe(true);
+    const last = new Date(choices[choices.length - 1][0]);
+    expect(last.getTime() - now).toBeLessThanOrEqual(24 * 3600_000);
   });
 
-  it("sets a timer", async () => {
-    api.getTub.mockResolvedValue(tubState({ setpoint: "off", heating: false }));
-    api.setTimer.mockResolvedValue({
-      timer: { setpoint: "105", ready_at: minutesAhead(240), set_by: "me@example.com", starts_at: minutesAhead(120) },
-    });
+  it("sets a timer, and shows the tub off until it starts", async () => {
+    const choices = timeChoices(Date.now());
+    const [readyAt] = choices[10];
+    const timer = { setpoint: "105", ready_at: readyAt, set_by: "me@example.com", set_at: minutesAgo(0), starts_at: minutesAhead(90) };
+    api.getTub.mockResolvedValueOnce(tubState()).mockResolvedValue(tubState({ setpoint: "off", heating: false, timer }));
+    api.setTimer.mockResolvedValue({ timer });
     render(<TubPanel />);
 
-    const form = await screen.findByRole("form", { name: "Timer" });
-    await userEvent.selectOptions(within(form).getByLabelText("Temperature"), "105");
-    await userEvent.click(within(form).getByText("Set timer"));
+    await userEvent.selectOptions(await screen.findByLabelText("Have it at"), "105");
+    await userEvent.selectOptions(screen.getByLabelText("by"), readyAt);
+    await userEvent.click(screen.getByText("Set"));
 
-    const [setpoint, readyAt] = api.setTimer.mock.calls[0];
-    expect(setpoint).toBe(105);
-    const ready = new Date(readyAt);
-    expect([ready.getHours(), ready.getMinutes()]).toEqual([19, 0]);
-    expect(await screen.findByText(/Timer: 105 °F by/)).toBeTruthy();
-    expect(screen.getByText(/Heating will start at about/)).toBeTruthy();
+    expect(api.setTimer).toHaveBeenCalledWith(105, readyAt);
+    expect(await screen.findByText(/The tub is off until about .*, then heats to 105 °F to be ready by/)).toBeTruthy();
+    expect(screen.getByText(/The timer was set by me@example.com/)).toBeTruthy();
+    // The controls now show the timer's request.
+    expect(screen.getByLabelText("by").value).toBe(readyAt);
+    expect(screen.getByText("Set").disabled).toBe(true);
+    expect(screen.queryByText("Turn off")).toBeNull();
   });
 
-  it("shows and cancels an existing timer", async () => {
-    api.getTub.mockResolvedValue(
-      tubState({
-        timer: { setpoint: "104", ready_at: minutesAhead(300), set_by: "pat@example.com", starts_at: minutesAhead(200) },
-      })
+  it("cancels a timer", async () => {
+    const timer = { setpoint: "104", ready_at: minutesAhead(300), set_by: "pat@example.com", set_at: minutesAgo(5), starts_at: minutesAhead(200) };
+    api.getTub.mockResolvedValueOnce(tubState({ setpoint: "off", heating: false, timer })).mockResolvedValue(
+      tubState({ setpoint: "off", heating: false })
     );
     api.cancelTimer.mockResolvedValue({ timer: null });
     render(<TubPanel />);
 
-    expect(await screen.findByText(/Timer: 104 °F by/)).toBeTruthy();
-    expect(screen.getByText(/set by pat@example.com/)).toBeTruthy();
+    expect(await screen.findByText(/The timer was set by pat@example.com, 5 minutes ago/)).toBeTruthy();
     await userEvent.click(screen.getByText("Cancel timer"));
     expect(api.cancelTimer).toHaveBeenCalled();
-    expect(await screen.findByText("Set timer")).toBeTruthy();
+    expect(await screen.findByText("The tub is at rest (off).")).toBeTruthy();
   });
 
   it("shows the API's reason when a timer is refused", async () => {
     api.getTub.mockResolvedValue(tubState());
     api.setTimer.mockRejectedValue(new Error("Choose a time at least 10 minutes from now"));
     render(<TubPanel />);
-    await userEvent.click(await screen.findByText("Set timer"));
+    const [readyAt] = timeChoices(Date.now())[0];
+    await userEvent.selectOptions(await screen.findByLabelText("by"), readyAt);
+    await userEvent.click(screen.getByText("Set"));
     expect((await screen.findByRole("alert")).textContent).toMatch(/at least 10 minutes/);
   });
 

@@ -31,40 +31,58 @@ function temperatures(hours) {
   return points;
 }
 
-const fixtures = {
-  "GET /tub": () => ({
-    setpoint: "104",
-    setpoint_changed_at: ago(42),
-    setpoint_changed_by: "pat.example@example.com",
-    setpoint_source: "ui",
-    current_temperature: 101,
-    temperature_measured_at: ago(1),
-    heating: true,
-    tub_last_seen_at: ago(1),
-    operator_last_seen_at: ago(1),
-    allowed_setpoints: ["off", "102", "103", "104", "105", "106"],
-    heating_estimate: {
-      ready_at: new Date(Date.now() + 47 * 60_000).toISOString(),
-      rate_per_hour: 3.8,
-      based_on: "this_heating",
-    },
-    timer: null,
-  }),
-  "PUT /tub/timer": (body) => ({
-    timer: {
-      setpoint: String(body.setpoint),
-      ready_at: body.ready_at,
-      set_by: "you@example.com",
-      starts_at: new Date(Date.parse(body.ready_at) - 100 * 60_000).toISOString(),
-    },
-  }),
-  "DELETE /tub/timer": () => ({ timer: null }),
-  "PUT /tub/setpoint": (body) => ({
-    setpoint: String(body.setpoint),
+const preview = {
+  setpoint: "104",
+  setpoint_changed_at: ago(42),
+  setpoint_changed_by: "pat.example@example.com",
+  setpoint_source: "ui",
+  timer: null,
+};
+
+function changed(setpoint) {
+  Object.assign(preview, {
+    setpoint,
     setpoint_changed_at: ago(0),
     setpoint_changed_by: "you@example.com",
     setpoint_source: "ui",
+  });
+}
+
+const fixtures = {
+  // The tub remembers changes made on this page, as the real API would.
+  "GET /tub": () => ({
+    current_temperature: 101,
+    temperature_measured_at: ago(1),
+    heating: preview.setpoint !== "off",
+    tub_last_seen_at: ago(1),
+    operator_last_seen_at: ago(1),
+    allowed_setpoints: ["off", "102", "103", "104", "105", "106"],
+    ...preview,
+    heating_estimate:
+      preview.setpoint !== "off" && Number(preview.setpoint) > 101
+        ? { ready_at: new Date(Date.now() + (Number(preview.setpoint) - 101) * 15 * 60_000).toISOString(), rate_per_hour: 3.8, based_on: "this_heating" }
+        : null,
   }),
+  "PUT /tub/timer": (body) => {
+    preview.timer = {
+      setpoint: String(body.setpoint),
+      ready_at: body.ready_at,
+      set_by: "you@example.com",
+      set_at: ago(0),
+      starts_at: new Date(Date.parse(body.ready_at) - 100 * 60_000).toISOString(),
+    };
+    changed("off");
+    return { timer: preview.timer };
+  },
+  "DELETE /tub/timer": () => {
+    preview.timer = null;
+    return { timer: null };
+  },
+  "PUT /tub/setpoint": (body) => {
+    preview.timer = null;
+    changed(String(body.setpoint));
+    return {};
+  },
   "GET /history": (_body, url) => {
     const hours = Number(new URL(url, location.href).searchParams.get("hours"));
     return {
