@@ -57,11 +57,12 @@ control logic must be made in both, with tests in both.
   Pacific, as the old system did: the tub cannot be left on during that hour.
 - **History**: every setpoint change (kept 400 days) and temperature reading
   (kept 35 days) is logged to a second DynamoDB table and shown in the UI.
-- **Domain names**: `hottub-test.cohoecovillage.org` and
-  `hottub.cohoecovillage.org`.  The live name belongs to the old system's
-  CloudFront distribution until cut-over, so deploy live with `--no-domain`
-  until then.  **Email** is sent through SES from `hottub@cohoecovillage.org`
-  once the domain is verified; before that Cognito's built-in sender is used.
+- **Domain names**: live only, `hottub.cohoecovillage.org`; test is a sandbox
+  at its CloudFront address.  CloudFront will not attach the name while public
+  DNS points at another distribution, so the `hottub` CNAME must point at
+  live's distribution before a deploy can add the name.  **Email** is sent
+  through SES from `hottub@cohoecovillage.org` once the domain is verified;
+  before that Cognito's built-in sender is used.
 
 ## Environments
 

@@ -13,8 +13,8 @@ Use "live" instead of "test" for the environment people actually use.
 
 "shared" sets up the two things both environments share, and prints the DNS
 records that have to be added by whoever manages the domain:
-  * a TLS certificate for the UI's own domain names (stack hottub-certificate,
-    always in us-east-1, as CloudFront requires)
+  * a TLS certificate for the live UI's domain name (stack hottub-certificate,
+    always in us-east-1, as CloudFront requires); test has no domain name
   * an SES identity so emails come from our own domain (stack hottub-email)
 Run it again at any time to see whether the DNS records have taken effect.
 Until they have, "stack" still works: the UI is served at its CloudFront
@@ -49,7 +49,8 @@ FUNCTION_DIR = ROOT / "api" / "function"
 UI_DIR = ROOT / "ui"
 
 # The UI's own domain name in each environment.
-DOMAINS = {"test": "hottub-test.cohoecovillage.org", "live": "hottub.cohoecovillage.org"}
+# Live only: test is a sandbox, served at its CloudFront address.
+DOMAINS = {"live": "hottub.cohoecovillage.org"}
 # Invitations and password-reset codes are sent from this address.
 EMAIL_DOMAIN = "cohoecovillage.org"
 EMAIL_FROM = "hottub@cohoecovillage.org"
@@ -125,33 +126,32 @@ def aws_json(*args, **kwargs):
     return json.loads(raw) if raw else None
 
 
-def certificates(statuses):
-    """Certificates in us-east-1 with one of `statuses`, as (arn, detail) pairs."""
-    listed = aws_json(
-        "acm", "list-certificates", "--region", CERTIFICATE_REGION,
-        "--certificate-statuses", *statuses,
-        "--query", "CertificateSummaryList[].CertificateArn",
-    ) or []
-    for arn in listed:
-        detail = aws_json(
-            "acm", "describe-certificate", "--region", CERTIFICATE_REGION,
-            "--certificate-arn", arn, "--query", "Certificate",
-        )
-        if detail:
-            yield arn, detail
+def our_certificate():
+    """(arn, detail) of the certificate in stack hottub-certificate, or (None, None).
 
-
-def covers(detail, domain):
-    """Does this certificate cover `domain`, by name or by wildcard?"""
-    names = detail.get("SubjectAlternativeNames", [])
-    return domain in names or "*." + domain.split(".", 1)[1] in names
+    Only this one is used: other certificates for the same name may exist in
+    the account (the old system had one) and are not ours to depend on.
+    """
+    arn = aws(
+        "cloudformation", "describe-stack-resource", "--region", CERTIFICATE_REGION,
+        "--stack-name", "hottub-certificate", "--logical-resource-id", "Certificate",
+        "--query", "StackResourceDetail.PhysicalResourceId", "--output", "text",
+        capture=True, check=False,
+    )
+    if not arn or not arn.startswith("arn:"):
+        return None, None
+    detail = aws_json(
+        "acm", "describe-certificate", "--region", CERTIFICATE_REGION,
+        "--certificate-arn", arn, "--query", "Certificate",
+    )
+    return (arn, detail) if detail else (None, None)
 
 
 def find_certificate(domain):
-    """ARN of an issued certificate covering `domain`, or None."""
-    for arn, detail in certificates(["ISSUED"]):
-        if covers(detail, domain):
-            return arn
+    """ARN of our certificate if it is issued and covers `domain`, else None."""
+    arn, detail = our_certificate()
+    if detail and detail.get("Status") == "ISSUED" and domain in detail.get("SubjectAlternativeNames", []):
+        return arn
     return None
 
 
@@ -188,7 +188,7 @@ def deploy_shared():
         "--stack-name", "hottub-certificate", "--query", "Stacks[0].StackStatus",
         "--output", "text", capture=True, check=False,
     )
-    if exists is None and not all(find_certificate(d) for d in DOMAINS.values()):
+    if exists is None:
         # Not "deploy": that would wait, possibly for days, until the
         # validation records below are in DNS.
         aws(
@@ -197,7 +197,6 @@ def deploy_shared():
             "--template-body", (ROOT / "infra" / "certificate.yaml").read_text(),
             "--parameters",
             f"ParameterKey=LiveDomainName,ParameterValue={DOMAINS['live']}",
-            f"ParameterKey=TestDomainName,ParameterValue={DOMAINS['test']}",
             capture=True,
         )
         print("    Requested. Run this command again in a minute to see its DNS records.")
@@ -212,11 +211,9 @@ def show_shared():
     print()
 
     print("  1. Certificate validation")
-    found = False
-    for _arn, detail in certificates(["PENDING_VALIDATION", "ISSUED"]):
-        if not any(covers(detail, d) for d in DOMAINS.values()):
-            continue
-        found = True
+    _arn, detail = our_certificate()
+    if detail:
+        print(f"     Certificate: {detail.get('Status')}")
         for option in detail.get("DomainValidationOptions", []):
             record = option.get("ResourceRecord")
             status = option.get("ValidationStatus", "?")
@@ -224,7 +221,7 @@ def show_shared():
                 print(f"     [{status}] {record['Name']} {record['Type']} {record['Value']}")
             else:
                 print(f"     [{status}] {option['DomainName']}: record not available yet")
-    if not found:
+    else:
         print("     No certificate found yet; run this command again in a minute.")
 
     print()
@@ -273,7 +270,7 @@ def deploy_stack(env, region, use_domain=True):
     # Use our own domain name and email sender when they are ready; otherwise
     # deploy without them.  Every parameter is passed every time, because
     # CloudFormation otherwise keeps whatever value the last deploy used.
-    certificate = find_certificate(DOMAINS[env]) if use_domain else None
+    certificate = find_certificate(DOMAINS[env]) if use_domain and env in DOMAINS else None
     identity = email_identity()
     if certificate:
         print(f"==> UI will be served at https://{DOMAINS[env]}")

@@ -1,8 +1,9 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
-  TLS certificate for the hot tub web UI's own domain names.  One stack,
-  hottub-certificate, shared by the test and live environments.  It MUST be
-  deployed in us-east-1: CloudFront only accepts certificates from there.
+  TLS certificate for the hot tub web UI's own domain name (live only: the
+  test environment is a sandbox served at its CloudFront address).  Stack
+  hottub-certificate.  It MUST be deployed in us-east-1: CloudFront only
+  accepts certificates from there.
 
 # Deploy with "scripts/deploy.py shared".  The stack does not finish creating
 # until the certificate's validation records have been added to DNS; the
@@ -11,16 +12,12 @@ Description: >
 Parameters:
   LiveDomainName:
     Type: String
-  TestDomainName:
-    Type: String
 
 Resources:
   Certificate:
     Type: AWS::CertificateManager::Certificate
     Properties:
       DomainName: !Ref LiveDomainName
-      SubjectAlternativeNames:
-        - !Ref TestDomainName
       ValidationMethod: DNS
 
 Outputs:
