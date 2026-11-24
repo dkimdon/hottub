@@ -1,0 +1,31 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# Start the hot tub operator in the background (and the SSH server, so the
+# phone can be reached from a computer).  Safe to run more than once.
+# Installed on the phone as ~/start; see ~/README-hottub.txt.
+
+cd "$HOME" || exit 1
+screen -wipe >/dev/null 2>&1   # forget sessions that died, e.g. at a reboot
+
+if screen -ls | grep -v Dead | grep -q '[.]hottub[[:space:]]'; then
+    echo "The operator is already running.  ./status shows what it is doing."
+    exit 0
+fi
+
+# Only one program may control the tub at a time.
+if screen -ls | grep -v Dead | grep -q '[.]hottubloop[[:space:]]' || pgrep -f bwa_aws_iot_thing >/dev/null; then
+    echo "The OLD operator (hottubloop) is still running.  Stop it first:"
+    echo "    screen -S hottubloop -X quit"
+    exit 1
+fi
+
+pgrep -x sshd >/dev/null || sshd
+termux-wake-lock
+screen -dmS hottub sh "$HOME/hottub-operator/run-termux.sh"
+sleep 1
+
+if screen -ls | grep -v Dead | grep -q '[.]hottub[[:space:]]'; then
+    echo "Started.  ./status shows what it is doing."
+else
+    echo "It did not start.  Try:  sh ~/hottub-operator/run-termux.sh"
+    exit 1
+fi

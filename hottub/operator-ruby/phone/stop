@@ -1,0 +1,10 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# Stop the hot tub operator.  The tub keeps its current settings, but nothing
+# controls it (including the midnight turn-off) until ./start is run again.
+# Installed on the phone as ~/stop; see ~/README-hottub.txt.
+
+if screen -S hottub -X quit >/dev/null 2>&1; then
+    echo "Stopped.  Nothing is controlling the tub until you run ./start"
+else
+    echo "The operator was not running."
+fi

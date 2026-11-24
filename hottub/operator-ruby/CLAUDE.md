@@ -12,7 +12,13 @@ until then **this is the one that runs, and the two must behave the same**.
 hottub_operator.rb   everything: API client, state file, control cycle, main
 test_operator.rb     minitest suite; no tub or network needed
 run-termux.sh        runs one cycle every two minutes under Termux
+phone/               copied to the phone's home directory: start, stop and
+                     status (so little typing is needed on the phone) and
+                     README-hottub.txt explaining them
 ```
+
+The phone is reached with `ssh -p 8022 u0_a1107@10.0.0.44`.  After changing
+anything in `phone/`, copy it to the phone's home directory (`scp -P 8022`).
 
 ## How it differs from the Python operator
 

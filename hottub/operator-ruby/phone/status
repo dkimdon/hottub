@@ -1,0 +1,20 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# Is the hot tub operator running, which system does it report to, and what
+# did it do last?  Installed on the phone as ~/status.
+
+if screen -ls | grep -v Dead | grep -q '[.]hottub[[:space:]]'; then
+    echo "Operator: RUNNING"
+else
+    echo "Operator: NOT running  (start it with ./start)"
+fi
+
+if screen -ls | grep -v Dead | grep -q '[.]hottubloop[[:space:]]'; then
+    echo "Warning: the OLD operator (hottubloop) is running too."
+fi
+
+url=$(grep HOTTUB_API_URL "$HOME/hottub-operator.env" 2>/dev/null | cut -d= -f2)
+echo "Reports to: ${url:-(not set: ~/hottub-operator.env is missing)}"
+
+echo
+echo "Last lines of ~/hottub-operator.log:"
+tail -n 5 "$HOME/hottub-operator.log" 2>/dev/null || echo "  (no log yet)"
