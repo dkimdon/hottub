@@ -1,0 +1,4 @@
+# Files that run on the phone or under a Unix shell must keep LF line endings.
+*.sh text eol=lf
+*.rb text eol=lf
+hottub/operator-ruby/phone/* text eol=lf
