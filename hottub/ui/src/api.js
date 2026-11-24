@@ -49,6 +49,9 @@ const user = (username) => `/users/${encodeURIComponent(username)}`;
 
 export const getTub = () => request("GET", "/tub");
 export const setSetpoint = (setpoint) => request("PUT", "/tub/setpoint", { setpoint });
+export const setTimer = (setpoint, readyAt) =>
+  request("PUT", "/tub/timer", { setpoint, ready_at: readyAt });
+export const cancelTimer = () => request("DELETE", "/tub/timer");
 export const getHistory = (hours) => request("GET", `/history?hours=${hours}`);
 
 export const listUsers = () => request("GET", "/users").then((r) => r.users);

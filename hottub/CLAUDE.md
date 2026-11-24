@@ -23,7 +23,8 @@ operator/       Python operator and Balboa protocol library — the intended
 ui/             React web app (Vite)
 infra/          CloudFormation: template.yaml (one stack per environment),
                 certificate.yaml and email.yaml (shared by both)
-scripts/        deploy.py (deploy everything), manage_users.py (bootstrap admins)
+scripts/        deploy.py (deploy everything), manage_users.py (bootstrap admins),
+                make_icons.py (draws the app icons into ui/public/)
 ```
 
 `api/`, `operator/`, `operator-ruby/` and `ui/` each have their own `CLAUDE.md`.

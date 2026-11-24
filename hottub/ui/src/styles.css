@@ -292,6 +292,88 @@ input[type="radio"] {
   stroke-width: 1;
 }
 
+/* ---------- Ready by (timer) ---------- */
+
+.ready-by {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.ready-by p {
+  margin: 0;
+}
+
+.ready-by-title {
+  font-weight: 600;
+}
+
+.ready-by-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+
+.ready-by-row label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ready-by select,
+.ready-by input[type="time"] {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  width: auto;
+}
+
+.ready-by button {
+  align-self: flex-start;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Points at the setpoint, from the left of the tube. */
+.thermometer-target {
+  fill: var(--accent);
+}
+
+/* Rises from the bulb to the top of the column while the heater is on.
+   --rise is set per bubble in Thermometer.jsx. */
+.thermometer-bubble {
+  fill: #ffffff;
+  stroke: var(--line-edge);
+  stroke-width: 0.4;
+  opacity: 0;
+  animation: bubble-rise 2.7s ease-in infinite;
+}
+
+@keyframes bubble-rise {
+  0% { transform: translateY(0); opacity: 0; }
+  15% { opacity: 0.9; }
+  85% { opacity: 0.9; }
+  100% { transform: translateY(var(--rise)); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thermometer-bubble { animation: none; }
+}
+
 .thermometer-tick {
   stroke: var(--muted);
   stroke-width: 1.5;
@@ -433,6 +515,25 @@ input[type="radio"] {
   stroke-width: 1.5;
 }
 
+/* The forecast: dashed, past a faint "now" line. */
+.chart-forecast {
+  fill: none;
+  stroke-width: 2;
+  stroke-dasharray: 5 4;
+  stroke-linecap: round;
+}
+
+.chart-forecast-end {
+  stroke: var(--line-edge);
+  stroke-width: 1;
+}
+
+.chart-now {
+  stroke: var(--border);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+}
+
 .chart-value {
   fill: var(--text);
   font-size: 12px;
@@ -494,6 +595,21 @@ td {
 
 .changes-title {
   margin-top: 20px;
+}
+
+/* Heater time and use count, under the graph. */
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 0.925rem;
+}
+
+.stats strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---------- Users ---------- */

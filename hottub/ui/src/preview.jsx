@@ -1,6 +1,7 @@
 // Development only: renders every screen with made-up data, so the look of
 // the UI can be checked without AWS.  See preview.html.
 
+import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { configureApi } from "./api";
 import HistoryPanel from "./HistoryPanel";
@@ -47,7 +48,17 @@ const fixtures = {
       rate_per_hour: 3.8,
       based_on: "this_heating",
     },
+    timer: null,
   }),
+  "PUT /tub/timer": (body) => ({
+    timer: {
+      setpoint: String(body.setpoint),
+      ready_at: body.ready_at,
+      set_by: "you@example.com",
+      starts_at: new Date(Date.parse(body.ready_at) - 100 * 60_000).toISOString(),
+    },
+  }),
+  "DELETE /tub/timer": () => ({ timer: null }),
   "PUT /tub/setpoint": (body) => ({
     setpoint: String(body.setpoint),
     setpoint_changed_at: ago(0),
@@ -60,6 +71,7 @@ const fixtures = {
       hours,
       from: ago(hours * 60),
       to: ago(0),
+      stats: { heating_hours: hours === 24 ? 3.4 : hours === 168 ? 14.2 : 61, times_used: hours === 24 ? 2 : hours === 168 ? 9 : 31 },
       temperatures: temperatures(hours),
       changes: [
         { at: ago(42), setpoint: "104", source: "ui", changed_by: "pat.example@example.com" },
@@ -89,10 +101,20 @@ configureApi({ apiUrl: "" }, { sessionExpired: () => {}, token: async () => "pre
 
 const me = { username: "u1", email: "you@example.com", isAdmin: true };
 
+// The tub panel shares its state with the graph, as in App.jsx.
+function TubAndHistory() {
+  const [tub, setTub] = useState(null);
+  return (
+    <>
+      <main className="card"><TubPanel onTub={setTub} /></main>
+      <section className="card"><HistoryPanel tub={tub} /></section>
+    </>
+  );
+}
+
 createRoot(document.getElementById("root")).render(
   <>
-    <main className="card"><TubPanel /></main>
-    <section className="card"><HistoryPanel /></section>
+    <TubAndHistory />
     <section className="card"><UsersPanel me={me} /></section>
     <SignIn onSignedIn={() => {}} />
   </>

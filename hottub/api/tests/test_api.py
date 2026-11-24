@@ -429,6 +429,24 @@ class TestHistory(ApiTestCase):
         self.assertTrue(all(100 <= p["temperature"] <= 103 for p in points))
         self.assertEqual([p["at"] for p in points], sorted(p["at"] for p in points))
 
+    def test_stats(self):
+        from datetime import datetime, timedelta, timezone
+        table = boto3.resource("dynamodb").Table("hottub-history-unit")
+        now = datetime.now(timezone.utc)
+        # Heating for an hour (readings every 2 minutes), then gaps of 28 and
+        # 12 minutes that must not count, then 10 minutes off.
+        times = [(m, True) for m in range(200, 139, -2)] + [(112, True)] + [(m, False) for m in range(100, 89, -2)]
+        for minutes, heating in times:
+            table.put_item(Item={"kind": "temperature", "temperature": 100, "heating": heating,
+                                 "at": (now - timedelta(minutes=minutes)).strftime("%Y-%m-%dT%H:%M:%SZ")})
+        self.call("PUT /tub/setpoint", {"setpoint": 104}, user=self.bob)
+        import time
+        time.sleep(1.1)  # history keeps one change per second
+        self.handler({"source": "hottub.schedule"}, None)
+        stats = self.history()[1]["stats"]
+        self.assertEqual(stats["heating_hours"], 1.0)
+        self.assertEqual(stats["times_used"], 1)  # the turn-off does not count
+
     def test_history_failure_does_not_block_control(self):
         boto3.client("dynamodb").delete_table(TableName="hottub-history-unit")
         status, _ = self.call("PUT /tub/setpoint", {"setpoint": 104}, user=self.bob)

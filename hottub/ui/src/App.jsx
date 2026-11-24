@@ -20,6 +20,8 @@ export default function App() {
   const [config, setConfig] = useState(null);
   const [startupError, setStartupError] = useState(null);
   const [page, setPage] = useState("tub");
+  // The tub panel's latest state, shared with the history graph's forecast.
+  const [tub, setTub] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,10 +81,10 @@ export default function App() {
         </nav>
       )}
 
-      <main className="card">{showUsers ? <UsersPanel me={user} /> : <TubPanel />}</main>
+      <main className="card">{showUsers ? <UsersPanel me={user} /> : <TubPanel onTub={setTub} />}</main>
       {!showUsers && (
         <section className="card">
-          <HistoryPanel />
+          <HistoryPanel tub={tub} />
         </section>
       )}
     </>

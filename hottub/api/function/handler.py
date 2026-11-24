@@ -34,6 +34,8 @@ USER, ADMIN, OPERATOR = "user", "admin", "operator"
 ROUTES = {
     "GET /tub":                               (USER, tub.get_tub),
     "PUT /tub/setpoint":                      (USER, tub.put_setpoint),
+    "PUT /tub/timer":                         (USER, tub.put_timer),
+    "DELETE /tub/timer":                      (USER, tub.delete_timer),
     "GET /history":                           (USER, history.get_history),
     "GET /users":                             (ADMIN, users.list_users),
     "POST /users":                            (ADMIN, users.create_user),

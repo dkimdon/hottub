@@ -71,6 +71,11 @@ def get_history(event, user):
         "hours": hours,
         "from": start.strftime(_TIME_FORMAT),
         "to": end.strftime(_TIME_FORMAT),
+        "stats": {
+            "heating_hours": round(heating_hours(readings), 1),
+            # Times someone (or a timer) asked for a temperature, not "off".
+            "times_used": sum(1 for c in changes if c["setpoint"] != "off" and c["source"] != "schedule"),
+        },
         "temperatures": _downsample(readings, start, end),
         "changes": [
             {
@@ -82,6 +87,21 @@ def get_history(event, user):
             for c in changes[:MAX_CHANGES]
         ],
     })
+
+
+# A gap longer than this between readings (the tub was unreachable) is not
+# counted as heating time, whatever the reading before it said.
+MAX_GAP_SECONDS = 10 * 60
+
+
+def heating_hours(readings: list) -> float:
+    """Hours the heater was on, from readings in time order."""
+    seconds = 0.0
+    for before, after in zip(readings, readings[1:]):
+        gap = (_parse(after["at"]) - _parse(before["at"])).total_seconds()
+        if before.get("heating") and gap <= MAX_GAP_SECONDS:
+            seconds += gap
+    return seconds / 3600
 
 
 def readings_since(start: datetime) -> list:

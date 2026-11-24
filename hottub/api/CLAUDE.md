@@ -15,6 +15,7 @@ function/users.py     user administration (Cognito)
 function/common.py    ApiError, JSON body parsing, responses
 tests/test_api.py     tests; DynamoDB and Cognito faked in-process by moto
 tests/test_estimate.py  the estimate's calculation, and GET /tub using it
+tests/test_timer.py   the timer, and Pacific time for the turn-off hour
 ```
 
 `GET /tub` includes `heating_estimate` (`ready_at`, `rate_per_hour`,
@@ -33,7 +34,9 @@ The AWS resources are in `../infra/template.yaml`; deploy with
 |---|---|---|
 | `GET /tub` | signed-in user | State shown in the UI |
 | `PUT /tub/setpoint` | signed-in user | `{"setpoint": "off" \| 102..106}` |
-| `GET /history?hours=24\|168\|720` | signed-in user | Temperature readings (averaged down to at most 240 points) and setpoint changes |
+| `PUT /tub/timer` | signed-in user | `{"setpoint": 102..106, "ready_at": ISO-8601}` — have it hot by then |
+| `DELETE /tub/timer` | signed-in user | Cancel the timer |
+| `GET /history?hours=24\|168\|720` | signed-in user | Temperature readings (averaged down to at most 240 points), setpoint changes, and `stats` (heater hours, times used) |
 | `GET /users` | admin | List users |
 | `POST /users` | admin | `{"email", "admin"}` — emails a temporary password |
 | `PATCH /users/{username}` | admin | `{"admin": bool}` |
@@ -66,6 +69,12 @@ reports a front-panel change it sends the version it last read; the change is
 only adopted if that is still the current version.  If a user changed the
 setpoint in between, the user's change stands and the response says
 `"adopted": false` along with the current desired state.
+
+**Timer**: one at a time, shared, kept in the tub item.  It starts the
+heating when `GET /operator/desired` is called at or after the computed start
+time (ready time minus heating time minus 20 minutes), so no extra scheduler
+is needed; the change has source `"timer"`.  It never starts during the
+midnight turn-off hour.  See "Timer" in `function/tub.py`.
 
 The nightly turn-off is an EventBridge schedule that invokes the same Lambda
 with `{"source": "hottub.schedule"}`.

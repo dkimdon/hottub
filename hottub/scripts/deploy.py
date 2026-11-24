@@ -330,14 +330,15 @@ def deploy_ui(env):
     target = f"s3://{outputs['UiBucketName']}"
     print(f"==> Uploading to {target}")
     # Files under assets/ have a fingerprint in their name and can be cached
-    # forever; the two entry files must always be fetched fresh.
-    aws("s3", "sync", str(dist), target, "--delete",
-        "--exclude", "index.html", "--exclude", "config.json",
+    # forever.  Everything else keeps its name from build to build (index.html,
+    # config.json, the icons, manifest.json), so browsers must check it each
+    # time.  "--delete" only removes files matching that sync's own filters.
+    aws("s3", "sync", str(dist / "assets"), f"{target}/assets", "--delete",
         "--cache-control", "public,max-age=31536000,immutable")
-    for name in ("index.html", "config.json"):
-        aws("s3", "cp", str(dist / name), f"{target}/{name}", "--cache-control", "no-cache")
+    aws("s3", "sync", str(dist), target, "--delete", "--exclude", "assets/*",
+        "--cache-control", "no-cache")
     aws("cloudfront", "create-invalidation", "--distribution-id", outputs["UiDistributionId"],
-        "--paths", "/index.html", "/config.json", "/", capture=True)
+        "--paths", "/*", capture=True)
     print(f"==> UI is at {outputs['UiUrl']}")
 
 

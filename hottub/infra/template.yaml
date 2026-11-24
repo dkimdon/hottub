@@ -321,6 +321,24 @@ Resources:
       AuthorizerId: !Ref ApiAuthorizer
       Target: !Sub integrations/${ApiIntegration}
 
+  RoutePutTimer:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: PUT /tub/timer
+      AuthorizationType: JWT
+      AuthorizerId: !Ref ApiAuthorizer
+      Target: !Sub integrations/${ApiIntegration}
+
+  RouteDeleteTimer:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: DELETE /tub/timer
+      AuthorizationType: JWT
+      AuthorizerId: !Ref ApiAuthorizer
+      Target: !Sub integrations/${ApiIntegration}
+
   RouteGetHistory:
     Type: AWS::ApiGatewayV2::Route
     Properties:

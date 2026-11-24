@@ -57,7 +57,13 @@ function xTicks(from, to, hours) {
   return ticks;
 }
 
-export default function TemperatureChart({ history }) {
+// A forecast further away than this would squash the day's readings.
+const MAX_FORECAST_MS = 12 * 3600_000;
+
+// forecast, if given: {from, fromTemperature, to, target} (times in ms) — a
+// dashed line from the latest reading to the setpoint at the estimated time,
+// drawn past "now" on the right.
+export default function TemperatureChart({ history, forecast = null }) {
   const wrapper = useRef(null);
   const width = useWidth(wrapper);
   const [hover, setHover] = useState(null);
@@ -73,8 +79,14 @@ export default function TemperatureChart({ history }) {
   }
 
   const from = Date.parse(history.from);
-  const to = Date.parse(history.to);
+  const now = Date.parse(history.to);
+  const ahead =
+    forecast && forecast.to > now && forecast.to - now <= MAX_FORECAST_MS && forecast.from >= from
+      ? forecast
+      : null;
+  const to = ahead ? ahead.to + (ahead.to - from) * 0.03 : now;
   const values = points.map((p) => p.temperature);
+  if (ahead) values.push(ahead.target, ahead.fromTemperature);
   const ticksY = yTicks(Math.min(...values) - 1, Math.max(...values) + 1);
   const low = ticksY[0];
   const high = ticksY[ticksY.length - 1];
@@ -121,7 +133,11 @@ export default function TemperatureChart({ history }) {
         height={HEIGHT}
         role="img"
         tabIndex={0}
-        aria-label={`Water temperature over the period, most recently ${last.temperature} degrees. Use the left and right arrow keys to read values.`}
+        aria-label={
+          `Water temperature over the period, most recently ${last.temperature} degrees.` +
+          (ahead ? ` Expected to reach ${ahead.target} degrees at ${full.format(ahead.to)}.` : "") +
+          " Use the left and right arrow keys to read values."
+        }
         onPointerMove={(e) => setHover(nearest(e.clientX))}
         onPointerDown={(e) => setHover(nearest(e.clientX))}
         onPointerLeave={() => setHover(null)}
@@ -164,6 +180,21 @@ export default function TemperatureChart({ history }) {
           );
         })}
 
+        {ahead && (
+          <g>
+            <line className="chart-now" x1={x(now)} x2={x(now)} y1={MARGIN.top} y2={MARGIN.top + plotHeight} />
+            <polyline
+              className="chart-forecast"
+              points={`${x(ahead.from).toFixed(1)},${y(ahead.fromTemperature).toFixed(1)} ${x(ahead.to).toFixed(1)},${y(ahead.target).toFixed(1)}`}
+              stroke={`url(#${gradient})`}
+            />
+            <circle className="chart-forecast-end" cx={x(ahead.to)} cy={y(ahead.target)} r="3.5" fill={colourFor(ahead.target)} />
+            <text className="chart-value" x={x(ahead.to) + 7} y={y(ahead.target) + 4}>
+              {ahead.target}°
+            </text>
+          </g>
+        )}
+
         {active && (
           <line className="chart-crosshair" x1={x(active.time)} x2={x(active.time)} y1={MARGIN.top} y2={MARGIN.top + plotHeight} />
         )}
@@ -176,7 +207,7 @@ export default function TemperatureChart({ history }) {
           r="4"
           fill={colourFor((active || last).temperature)}
         />
-        {!active && (
+        {!active && !ahead && (
           <text className="chart-value" x={x(last.time) + 8} y={y(last.temperature) + 4}>
             {last.temperature}°
           </text>

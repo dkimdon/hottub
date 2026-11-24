@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { getTub, setSetpoint } from "./api";
 import { aboutWhen, ago, secondsSince } from "./format";
+import ReadyBy from "./ReadyBy";
 import Thermometer from "./Thermometer";
 
 const REFRESH_MS = 30_000;
@@ -18,6 +19,7 @@ function changedBySentence(tub, now) {
     ui: tub.setpoint_changed_by || "someone using this page",
     panel: "someone using the buttons on the tub itself",
     schedule: "the automatic turn-off at midnight",
+    timer: tub.setpoint_changed_by ? `a timer ${tub.setpoint_changed_by} set` : "a timer",
   }[tub.setpoint_source];
   if (!who) return null;
   return `The last change was made by ${who}, ${ago(tub.setpoint_changed_at, now)}.`;
@@ -58,8 +60,13 @@ function warning(tub, now) {
   return null;
 }
 
-export default function TubPanel() {
+// onTub, if given, is told the tub state whenever it changes (the history
+// graph uses it to draw the forecast).
+export default function TubPanel({ onTub }) {
   const [tub, setTub] = useState(null);
+  useEffect(() => {
+    if (onTub) onTub(tub);
+  }, [tub, onTub]);
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(null);
   const [now, setNow] = useState(Date.now());
@@ -116,7 +123,11 @@ export default function TubPanel() {
   return (
     <>
       <section className="tub-status">
-        <Thermometer value={temperature} />
+        <Thermometer
+          value={temperature}
+          setpoint={tub.setpoint && tub.setpoint !== "off" ? Number(tub.setpoint) : null}
+          heating={Boolean(tub.heating)}
+        />
         <div>
           <p className="temperature">
             {temperature === null ? "—" : `${temperature}°F`}
@@ -153,6 +164,7 @@ export default function TubPanel() {
           </label>
         ))}
       </fieldset>
+      <ReadyBy tub={tub} now={now} onTimer={(timer) => setTub((current) => ({ ...current, timer }))} />
       <p className="hint">
         Changes reach the tub within a few minutes. The tub turns off automatically at midnight.
       </p>
