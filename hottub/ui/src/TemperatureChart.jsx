@@ -1,7 +1,8 @@
 // Water temperature over time: one line, drawn in SVG at the container's real
 // pixel size so text stays readable on a phone.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { TemperatureGradient, colourFor } from "./temperatureColours";
 
 const HEIGHT = 200;
 const MARGIN = { top: 14, right: 44, bottom: 24, left: 34 };
@@ -60,6 +61,7 @@ export default function TemperatureChart({ history }) {
   const wrapper = useRef(null);
   const width = useWidth(wrapper);
   const [hover, setHover] = useState(null);
+  const gradient = useId();
 
   const points = useMemo(
     () => history.temperatures.map((p) => ({ ...p, time: Date.parse(p.at) })),
@@ -140,24 +142,40 @@ export default function TemperatureChart({ history }) {
           </text>
         ))}
 
-        {segments.map((segment) =>
-          segment.length === 1 ? (
-            <circle key={segment[0].at} className="chart-dot" cx={x(segment[0].time)} cy={y(segment[0].temperature)} r="1.5" />
-          ) : (
-            <polyline
-              key={segment[0].at}
-              className="chart-line"
-              points={segment.map((p) => `${x(p.time).toFixed(1)},${y(p.temperature).toFixed(1)}`).join(" ")}
-            />
-          )
-        )}
+        {/* The line takes the thermometer's colours: each height is painted
+            the colour of its temperature.  A thin edge drawn underneath keeps
+            the icy-white end visible on a white page. */}
+        <defs>
+          <TemperatureGradient id={gradient} y={y} />
+        </defs>
+        {segments.map((segment) => {
+          if (segment.length === 1) {
+            const p = segment[0];
+            return (
+              <circle key={p.at} className="chart-dot" cx={x(p.time)} cy={y(p.temperature)} r="2" fill={colourFor(p.temperature)} />
+            );
+          }
+          const coordinates = segment.map((p) => `${x(p.time).toFixed(1)},${y(p.temperature).toFixed(1)}`).join(" ");
+          return (
+            <g key={segment[0].at}>
+              <polyline className="chart-line-edge" points={coordinates} />
+              <polyline className="chart-line" points={coordinates} stroke={`url(#${gradient})`} />
+            </g>
+          );
+        })}
 
         {active && (
           <line className="chart-crosshair" x1={x(active.time)} x2={x(active.time)} y1={MARGIN.top} y2={MARGIN.top + plotHeight} />
         )}
 
         {/* The most recent reading, labelled; hovering moves the marker. */}
-        <circle className="chart-marker" cx={x((active || last).time)} cy={y((active || last).temperature)} r="4" />
+        <circle
+          className="chart-marker"
+          cx={x((active || last).time)}
+          cy={y((active || last).temperature)}
+          r="4"
+          fill={colourFor((active || last).temperature)}
+        />
         {!active && (
           <text className="chart-value" x={x(last.time) + 8} y={y(last.temperature) + 4}>
             {last.temperature}°

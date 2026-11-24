@@ -133,7 +133,7 @@ export default function TubPanel() {
         ))}
       </fieldset>
       <p className="hint">
-        Changes reach the tub within a few minutes. The tub is turned off automatically at midnight.
+        Changes reach the tub within a few minutes. The tub turns off automatically at midnight.
       </p>
     </>
   );

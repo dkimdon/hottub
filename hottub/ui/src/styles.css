@@ -5,15 +5,18 @@
   --text: #17242d;
   --muted: #5d6f7b;
   --border: #d3dce2;
-  --accent: #0b6e8e;
+  /* Colours follow the thermometer's scale in Thermometer.jsx: icy blue,
+     darker blue, purple, red.  Blue is a shade deeper than the thermometer's
+     #2f6fd6 so that text in it is readable on the light backgrounds. */
+  --accent: #2a66cc;
   --accent-text: #ffffff;
-  --accent-soft: #e2f1f6;
-  --danger: #b3261e;
-  --danger-soft: #fbe9e7;
-  --ok-soft: #e4f4e8;
-  --ok: #1d6b34;
-  --warm: #d9541e;
-  --series: #2a78d6;
+  --accent-soft: #e3f4fc;
+  --danger: #a3121c;
+  --danger-soft: #fbe8e8;
+  --ok-soft: #e3f4fc;
+  --ok: #2a66cc;
+  --warm: #d62828;
+  --line-edge: #8a9aa5;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -23,15 +26,16 @@
     --text: #e8eef1;
     --muted: #9fb0ba;
     --border: #33434d;
-    --accent: #58b8d6;
+    /* Lighter tints of the same scale, readable on the dark backgrounds. */
+    --accent: #8ccdf0;
     --accent-text: #0b1b22;
-    --accent-soft: #17323d;
-    --danger: #ff8a80;
-    --danger-soft: #3d1f1c;
-    --ok-soft: #173322;
-    --ok: #8fd6a4;
-    --warm: #ff8a50;
-    --series: #3987e5;
+    --accent-soft: #1b3049;
+    --danger: #f08a8a;
+    --danger-soft: #3d1f1f;
+    --ok-soft: #1b3049;
+    --ok: #8ccdf0;
+    --warm: #f08a8a;
+    --line-edge: #5d6f7b;
   }
 }
 
@@ -282,8 +286,10 @@ input[type="radio"] {
   stroke-width: 2;
 }
 
+/* Colour comes from Thermometer.jsx; the edge keeps the icy-white end visible. */
 .thermometer-fill {
-  fill: var(--warm);
+  stroke: var(--border);
+  stroke-width: 1;
 }
 
 .thermometer-tick {
@@ -301,34 +307,32 @@ input[type="radio"] {
   margin: 0 0 12px;
   padding: 0;
   display: grid;
-  gap: 8px;
+  justify-items: start;
+  gap: 2px;
 }
 
 .setpoints legend {
   font-weight: 600;
   padding: 0;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 
+/* Plain radio buttons, no boxes.  The vertical padding keeps each one an
+   easy target for a finger. */
 .setpoints label {
   display: flex;
   align-items: center;
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  padding: 6px 0;
   cursor: pointer;
   font-size: 1.1rem;
 }
 
 .setpoints label:has(input:checked) {
-  border-color: var(--accent);
-  background: var(--accent-soft);
   font-weight: 600;
 }
 
 .setpoints label.saving {
-  border-style: dashed;
-  border-color: var(--accent);
+  opacity: 0.6;
 }
 
 .setpoints:disabled label {
@@ -402,22 +406,31 @@ input[type="radio"] {
   font-size: 11px;
 }
 
-.chart-line {
+/* Line, dot and marker colours come from temperatureColours.jsx. */
+.chart-line,
+.chart-line-edge {
   fill: none;
-  stroke: var(--series);
-  stroke-width: 2;
   stroke-linejoin: round;
   stroke-linecap: round;
 }
 
+.chart-line {
+  stroke-width: 2;
+}
+
+.chart-line-edge {
+  stroke: var(--line-edge);
+  stroke-width: 3.5;
+}
+
 .chart-dot {
-  fill: var(--series);
+  stroke: var(--line-edge);
+  stroke-width: 0.75;
 }
 
 .chart-marker {
-  fill: var(--series);
-  stroke: var(--surface);
-  stroke-width: 2;
+  stroke: var(--line-edge);
+  stroke-width: 1.5;
 }
 
 .chart-value {

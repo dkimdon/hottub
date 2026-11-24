@@ -256,7 +256,9 @@ Resources:
         AllowOrigins:
           - !Sub https://${UiDistribution.DomainName}
           - !If [HasDomain, !Sub "https://${UiDomainName}", !Ref "AWS::NoValue"]
+          # A local "npm run dev"; 5174 for when 5173 is taken.
           - !If [IsTest, http://localhost:5173, !Ref "AWS::NoValue"]
+          - !If [IsTest, http://localhost:5174, !Ref "AWS::NoValue"]
         AllowMethods: [GET, PUT, POST, PATCH, DELETE]
         AllowHeaders: [authorization, content-type]
         MaxAge: 3600

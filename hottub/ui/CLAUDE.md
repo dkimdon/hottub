@@ -14,6 +14,8 @@ src/HistoryPanel.jsx      period buttons, graph, table of changes
 src/TemperatureChart.jsx  the graph: hand-written SVG, no chart library
 src/UsersPanel.jsx   admin-only user management
 src/Thermometer.jsx  SVG thermometer
+src/temperatureColours.jsx  colour scale (icy white → blue → purple → red)
+                     shared by the thermometer and the graph
 src/preview.jsx      development only: every screen with made-up data
                      (preview.html); not part of the production build
 src/auth.js          the only file that imports aws-amplify
@@ -34,7 +36,8 @@ npm run dev       # local dev server on http://localhost:5173
 
 For `npm run dev`, first run `python ../scripts/deploy.py ui-config test`, which
 writes `public/config.json` pointing at the test stack.  The test API allows
-`http://localhost:5173` as a browser origin; the live API does not.
+`http://localhost:5173` and `http://localhost:5174` as browser origins; the
+live API does not.
 
 Deploy with `python ../scripts/deploy.py ui test`.
 
