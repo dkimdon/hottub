@@ -68,6 +68,12 @@ control logic must be made in both, with tests in both.
 Two independent stacks, `hottub-test` and `hottub-live`, from the same
 template, in us-west-2.  Always deploy and check `test` first.
 
+There is only one tub, so only one stack can have the operator.  `live` is the
+one with the tub and the real users; `test` is a sandbox with no operator (its
+tub page says the controller is not connected), for trying changes and
+user-admin emails safely.  Until go-live the operator points at `test`, so
+for now `test` controls the real tub.
+
 ```bash
 python scripts/deploy.py shared test                    # certificate + SES; prints DNS records
 python scripts/deploy.py all test                       # stack, then UI
