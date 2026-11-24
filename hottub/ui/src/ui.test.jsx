@@ -122,6 +122,54 @@ describe("TubPanel", () => {
     expect(await screen.findByText(/automatic turn-off at midnight/)).toBeTruthy();
   });
 
+  it("says when the tub should reach its setpoint", async () => {
+    const readyAt = new Date(Date.now() + 90 * 60_000).toISOString();
+    api.getTub.mockResolvedValue(
+      tubState({ heating_estimate: { ready_at: readyAt, rate_per_hour: 3.8, based_on: "this_heating" } })
+    );
+    render(<TubPanel />);
+    expect(
+      await screen.findByText(/should reach 104 °F at about .*, at the rate it has been warming \(about 4 °F an hour\)/)
+    ).toBeTruthy();
+  });
+
+  it("names a typical rate when there is no history to go on", async () => {
+    const readyAt = new Date(Date.now() + 60 * 60_000).toISOString();
+    api.getTub.mockResolvedValue(
+      tubState({ heating_estimate: { ready_at: readyAt, rate_per_hour: 4, based_on: "typical" } })
+    );
+    render(<TubPanel />);
+    expect(await screen.findByText(/at a typical 4 °F an hour/)).toBeTruthy();
+  });
+
+  it("says 'within a few minutes' when nearly there", async () => {
+    const readyAt = new Date(Date.now() + 2 * 60_000).toISOString();
+    api.getTub.mockResolvedValue(
+      tubState({ heating_estimate: { ready_at: readyAt, rate_per_hour: 4, based_on: "typical" } })
+    );
+    render(<TubPanel />);
+    expect(await screen.findByText("It should reach 104 °F within a few minutes.")).toBeTruthy();
+  });
+
+  it("gives no estimate without one, or while the readings are in doubt", async () => {
+    api.getTub.mockResolvedValue(tubState({ heating_estimate: null }));
+    const { unmount } = render(<TubPanel />);
+    await screen.findByText("101°F");
+    expect(screen.queryByText(/should reach/)).toBeNull();
+    unmount();
+
+    const readyAt = new Date(Date.now() + 60 * 60_000).toISOString();
+    api.getTub.mockResolvedValue(
+      tubState({
+        tub_last_seen_at: minutesAgo(125),
+        heating_estimate: { ready_at: readyAt, rate_per_hour: 4, based_on: "typical" },
+      })
+    );
+    render(<TubPanel />);
+    await screen.findByRole("alert");
+    expect(screen.queryByText(/should reach/)).toBeNull();
+  });
+
   it("warns when the tub has not been reached for a long time", async () => {
     api.getTub.mockResolvedValue(tubState({ tub_last_seen_at: minutesAgo(125) }));
     render(<TubPanel />);

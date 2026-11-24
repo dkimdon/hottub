@@ -42,6 +42,11 @@ const fixtures = {
     tub_last_seen_at: ago(1),
     operator_last_seen_at: ago(1),
     allowed_setpoints: ["off", "102", "103", "104", "105", "106"],
+    heating_estimate: {
+      ready_at: new Date(Date.now() + 47 * 60_000).toISOString(),
+      rate_per_hour: 3.8,
+      based_on: "this_heating",
+    },
   }),
   "PUT /tub/setpoint": (body) => ({
     setpoint: String(body.setpoint),

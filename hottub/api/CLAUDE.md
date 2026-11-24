@@ -10,10 +10,19 @@ which the Lambda runtime provides — nothing is bundled.
 function/handler.py   entry point: routing and who-may-call-what
 function/tub.py       desired state, operator reports, nightly turn-off
 function/history.py   log of setpoint changes and temperature readings
+function/estimate.py  when the tub should reach its setpoint (pure functions)
 function/users.py     user administration (Cognito)
 function/common.py    ApiError, JSON body parsing, responses
 tests/test_api.py     tests; DynamoDB and Cognito faked in-process by moto
+tests/test_estimate.py  the estimate's calculation, and GET /tub using it
 ```
+
+`GET /tub` includes `heating_estimate` (`ready_at`, `rate_per_hour`,
+`based_on`) while the tub is below a numeric setpoint and its last reading is
+recent; otherwise null.  The rate comes from the heating run in progress, else
+the past week's runs (cached in the tub item for six hours), else 4 °F/hour.
+See the docstring in `function/estimate.py`.  Like history, it must never
+break the request: any failure gives null.
 
 The AWS resources are in `../infra/template.yaml`; deploy with
 `../scripts/deploy.py`.

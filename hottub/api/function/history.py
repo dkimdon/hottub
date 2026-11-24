@@ -84,6 +84,11 @@ def get_history(event, user):
     })
 
 
+def readings_since(start: datetime) -> list:
+    """Temperature readings since `start`, oldest first, as stored."""
+    return _query("temperature", start)
+
+
 def _query(kind: str, start: datetime) -> list:
     """All items of one kind since `start`, oldest first."""
     condition = Key("kind").eq(kind) & Key("at").gte(start.strftime(_TIME_FORMAT))

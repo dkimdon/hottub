@@ -156,9 +156,16 @@ def find_certificate(domain):
 
 
 def email_identity():
-    """ARN of the SES identity if it is verified and ready to send, else None."""
+    """ARN of the SES identity if it is verified and ready to send, else None.
+
+    Also None while the account's SES is in sandbox mode: there it only
+    delivers to individually verified addresses, so switching Cognito to it
+    would silently stop invitations reaching new users.
+    """
     identity = aws_json("sesv2", "get-email-identity", "--email-identity", EMAIL_DOMAIN)
     if not identity or not identity.get("VerifiedForSendingStatus"):
+        return None
+    if not (aws_json("sesv2", "get-account") or {}).get("ProductionAccessEnabled"):
         return None
     account = aws("sts", "get-caller-identity", "--query", "Account", "--output", "text",
                   capture=True)
@@ -229,8 +236,9 @@ def show_shared():
     for output in outputs:
         if output["OutputKey"].startswith("DkimRecord"):
             print(f"     {output['OutputValue']}")
-    ready = email_identity() is not None
-    print(f"     Status: {'verified' if ready else 'waiting for these records'}")
+    identity = aws_json("sesv2", "get-email-identity", "--email-identity", EMAIL_DOMAIN) or {}
+    verified = identity.get("VerifiedForSendingStatus")
+    print(f"     Status: {'verified' if verified else 'waiting for these records'}")
     account = aws_json("sesv2", "get-account") or {}
     if not account.get("ProductionAccessEnabled"):
         print("     NOTE: this AWS account's SES is in sandbox mode. Until AWS grants")

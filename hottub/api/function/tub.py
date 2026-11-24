@@ -26,14 +26,21 @@ Reported state — written by the operator:
   tub_set_temperature, tub_heating_mode, tub_temperature_range, tub_heating
   tub_last_seen_at         last time the operator reached the tub
   operator_last_seen_at    last time the operator reached this API
+
+Cached for the heating estimate (see estimate.py):
+
+  heating_rate             °F per hour over the past week's heating, or null
+  heating_rate_at          when that was computed
 """
 
 import os
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import boto3
 from botocore.exceptions import ClientError
 
+import estimate
 import history
 from common import ApiError, json_body, now, respond
 
@@ -57,8 +64,9 @@ TEMPERATURE_RANGES = {"high", "low"}
 
 def get_tub(event, user):
     item = _read()
+    setpoint = _setpoint(_desired(item))
     return respond(200, {
-        "setpoint": _setpoint(_desired(item)),
+        "setpoint": setpoint,
         "setpoint_changed_at": item.get("setpoint_changed_at"),
         "setpoint_changed_by": item.get("setpoint_changed_by"),
         "setpoint_source": item.get("setpoint_source"),
@@ -68,7 +76,55 @@ def get_tub(event, user):
         "tub_last_seen_at": item.get("tub_last_seen_at"),
         "operator_last_seen_at": item.get("operator_last_seen_at"),
         "allowed_setpoints": ALLOWED_SETPOINTS,
+        "heating_estimate": _heating_estimate(item, setpoint),
     })
+
+
+def _heating_estimate(item: dict, setpoint):
+    """When the tub should reach its setpoint (see estimate.py), or None.
+
+    A convenience: any failure gives no estimate rather than a failed page.
+    The past week's rate takes a larger query, so it is kept in the tub item
+    and recomputed at most every RATE_CACHE_HOURS.
+    """
+    if setpoint in (None, "off") or item.get("current_temperature") is None:
+        return None
+    target = int(setpoint)
+    if float(item["current_temperature"]) >= target:
+        return None
+    try:
+        now_dt = datetime.now(timezone.utc)
+        recent = history.readings_since(now_dt - timedelta(hours=estimate.RECENT_HOURS))
+        rate, based_on = estimate.current_rate(recent), "this_heating"
+        if rate is None:
+            rate, based_on = _past_week_rate(item, now_dt), "past_week"
+        if rate is None:
+            rate, based_on = estimate.DEFAULT_RATE, "typical"
+        return estimate.estimate(target, item["current_temperature"],
+                                 item.get("temperature_measured_at"), rate, based_on, now_dt)
+    except Exception as e:
+        print(f"Could not estimate heating time: {type(e).__name__}: {e}")
+        return None
+
+
+RATE_CACHE_HOURS = 6
+
+
+def _past_week_rate(item: dict, now_dt):
+    cached_at = item.get("heating_rate_at")
+    if cached_at and now_dt - estimate.parse(cached_at) < timedelta(hours=RATE_CACHE_HOURS):
+        rate = item.get("heating_rate")
+        return None if rate is None else float(rate)
+    rate = estimate.learned_rate(history.readings_since(now_dt - timedelta(days=estimate.LEARN_DAYS)))
+    TABLE.update_item(
+        Key=KEY,
+        UpdateExpression="SET heating_rate = :rate, heating_rate_at = :at",
+        ExpressionAttributeValues={
+            ":rate": None if rate is None else Decimal(str(round(rate, 2))),
+            ":at": now_dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        },
+    )
+    return rate
 
 
 def put_setpoint(event, user):

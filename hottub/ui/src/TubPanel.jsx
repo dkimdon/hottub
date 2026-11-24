@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { getTub, setSetpoint } from "./api";
-import { ago, secondsSince } from "./format";
+import { aboutWhen, ago, secondsSince } from "./format";
 import Thermometer from "./Thermometer";
 
 const REFRESH_MS = 30_000;
@@ -21,6 +21,24 @@ function changedBySentence(tub, now) {
   }[tub.setpoint_source];
   if (!who) return null;
   return `The last change was made by ${who}, ${ago(tub.setpoint_changed_at, now)}.`;
+}
+
+// "It should reach 104 °F at about 9:40 PM, at the rate it has been warming
+// (about 3.5 °F an hour)."  The API works out the time; see api/estimate.py.
+function readySentence(tub, now) {
+  const estimate = tub.heating_estimate;
+  if (!estimate) return null;
+  const rate = `${Math.round(estimate.rate_per_hour * 2) / 2} °F an hour`;
+  const basis = {
+    this_heating: `at the rate it has been warming (about ${rate})`,
+    past_week: `at this past week's heating rate (about ${rate})`,
+    typical: `at a typical ${rate}`,
+  }[estimate.based_on];
+  const target = `${tub.setpoint} °F`;
+  if (Date.parse(estimate.ready_at) - now < 5 * 60_000) {
+    return `It should reach ${target} within a few minutes.`;
+  }
+  return `It should reach ${target} at about ${aboutWhen(estimate.ready_at, now)}${basis ? `, ${basis}` : ""}.`;
 }
 
 // Why the readings might not be trustworthy, or null if all is well.
@@ -72,7 +90,8 @@ export default function TubPanel() {
     setSaving(setpoint);
     try {
       const change = await setSetpoint(setpoint);
-      setTub((current) => ({ ...current, ...change }));
+      // The estimate was for the old setpoint; the next refresh brings a new one.
+      setTub((current) => ({ ...current, ...change, heating_estimate: null }));
       setError(null);
     } catch (e) {
       setError(e.message);
@@ -88,6 +107,7 @@ export default function TubPanel() {
   const temperature = tub.current_temperature;
   const problem = warning(tub, now);
   const changedBy = changedBySentence(tub, now);
+  const ready = problem ? null : readySentence(tub, now);
   // Highest temperature first, "off" last, as on the old page.
   const choices = [...tub.allowed_setpoints].sort((a, b) =>
     a === "off" ? 1 : b === "off" ? -1 : Number(b) - Number(a)
@@ -109,6 +129,7 @@ export default function TubPanel() {
                 : "The water temperature has not been measured yet."}
             </li>
             <li>{setpointSentence(tub.setpoint)}</li>
+            {ready && <li>{ready}</li>}
             {changedBy && <li>{changedBy}</li>}
           </ul>
         </div>
