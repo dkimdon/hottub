@@ -10,6 +10,10 @@ import boto3
 from test_api import ApiTestCase
 
 
+WAITING = {"heating_mode": "ready", "temperature_range": "low", "set_temperature": 50}
+REST = {"heating_mode": "rest", "temperature_range": "low", "set_temperature": 50}
+
+
 def iso(dt):
     return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -140,7 +144,7 @@ class TestTimerStartsHeating(TimerTestCase):
                          "temperature_range": "low"})
         self.call("PUT /tub/setpoint", {"setpoint": "off"}, user=self.alice)
         self.set_timer(104, in_minutes(60 * 20))
-        self.assertEqual(self.desired()["desired"]["heating_mode"], "rest")
+        self.assertEqual(self.desired()["desired"], WAITING)
         self.assertIsNotNone(self.state()["timer"])
 
     def test_starts_heating_when_it_is_time(self):
@@ -180,8 +184,100 @@ class TestTimerStartsHeating(TimerTestCase):
         self.call("PUT /tub/setpoint", {"setpoint": "off"}, user=self.alice)
         self.set_timer(104, in_minutes(30))
         with mock.patch.object(self.tub, "_quiet_hour", return_value=True):
-            self.assertEqual(self.desired()["desired"]["heating_mode"], "rest")
-        self.assertEqual(self.desired()["desired"]["heating_mode"], "ready")
+            self.assertEqual(self.desired()["desired"], WAITING)
+        self.assertEqual(self.desired()["desired"]["temperature_range"], "high")
+
+
+class TestWaitingForTheTimer(TimerTestCase):
+    """While a timer waits, the tub is in ready mode at 50 °F: it does not
+    heat, but it reports the water temperature (at rest it may not, for hours)."""
+
+    def table(self):
+        return boto3.resource("dynamodb").Table("hottub-unit")
+
+    def test_setting_a_timer_waits_in_ready_mode_at_50(self):
+        self.report(tub={"current_temperature": 90, "heating_mode": "rest"})
+        self.call("PUT /tub/setpoint", {"setpoint": "off"}, user=self.alice)
+        self.set_timer(104, in_minutes(60 * 20))
+        self.assertEqual(self.desired()["desired"], WAITING)
+        state = self.state()
+        self.assertEqual(state["setpoint"], "off")
+        self.assertIsNone(state["heating_estimate"])
+
+    def test_a_second_timer_does_not_change_the_desired_state_again(self):
+        self.set_timer(104, in_minutes(60 * 20))
+        version = self.desired()["desired_version"]
+        self.set_timer(105, in_minutes(60 * 21))
+        self.assertEqual(self.desired()["desired_version"], version)
+
+    def test_cancelling_goes_back_to_rest(self):
+        self.set_timer(104, in_minutes(60 * 20))
+        self.call("DELETE /tub/timer", user=self.alice)
+        self.assertEqual(self.desired()["desired"], REST)
+        self.assertEqual(self.state()["setpoint_changed_by"], "alice@example.com")
+
+    def test_cancelling_leaves_a_heat_request_alone(self):
+        self.call("PUT /tub/setpoint", {"setpoint": 104}, user=self.alice)
+        self.call("DELETE /tub/timer", user=self.bob)
+        self.assertEqual(self.desired()["desired"]["set_temperature"], 104)
+
+    def test_turning_off_goes_to_rest(self):
+        self.set_timer(104, in_minutes(60 * 20))
+        self.call("PUT /tub/setpoint", {"setpoint": "off"}, user=self.alice)
+        self.assertEqual(self.desired()["desired"], REST)
+
+    def test_a_missed_timer_goes_back_to_rest(self):
+        self.report(tub={"current_temperature": 90})
+        self.set_timer(104, in_minutes(60 * 20))
+        self.table().update_item(Key={"id": "tub"}, UpdateExpression="SET timer_ready_at = :r",
+                                 ExpressionAttributeValues={":r": in_minutes(-90)})
+        self.assertEqual(self.desired()["desired"], REST)
+        state = self.state()
+        self.assertIsNone(state["timer"])
+        self.assertEqual(state["setpoint_source"], "timer")
+
+    def test_a_panel_change_replaces_the_waiting_state(self):
+        self.report(tub={"current_temperature": 90})
+        self.set_timer(104, in_minutes(60 * 20))
+        version = self.desired()["desired_version"]
+        self.report(tub={"heating_mode": "rest", "set_temperature": 50, "temperature_range": "low"},
+                    panel_change=True, desired_version=version)
+        self.assertEqual(self.desired()["desired"], REST)
+        self.assertIsNone(self.state()["timer"])
+
+    def test_the_nightly_turn_off_leaves_the_waiting_state(self):
+        self.set_timer(104, in_minutes(60 * 20))
+        version = self.desired()["desired_version"]
+        self.handler({"source": "hottub.schedule"}, None)
+        self.assertEqual(self.desired()["desired"], WAITING)
+        self.assertEqual(self.desired()["desired_version"], version)
+
+    def test_the_nightly_turn_off_still_turns_off_heating(self):
+        self.call("PUT /tub/setpoint", {"setpoint": 104}, user=self.alice)
+        self.handler({"source": "hottub.schedule"}, None)
+        self.assertEqual(self.desired()["desired"], REST)
+
+    def starts_at(self):
+        raw = self.state()["timer"]["starts_at"]
+        return datetime.strptime(raw, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+
+    def test_a_fresh_reading_is_used(self):
+        self.report(tub={"current_temperature": 100})
+        ready = datetime.now(timezone.utc) + timedelta(hours=10)
+        self.set_timer(104, iso(ready))
+        # 4 °F at 4 °F an hour.
+        expected = ready - timedelta(hours=1, minutes=self.tub.TIMER_MARGIN_MINUTES)
+        self.assertLess(abs((self.starts_at() - expected).total_seconds()), 90)
+
+    def test_a_stale_reading_is_not_trusted(self):
+        self.report(tub={"current_temperature": 103})
+        self.table().update_item(Key={"id": "tub"}, UpdateExpression="SET temperature_measured_at = :m",
+                                 ExpressionAttributeValues={":m": in_minutes(-61)})
+        ready = datetime.now(timezone.utc) + timedelta(hours=10)
+        self.set_timer(104, iso(ready))
+        # From the assumed 80 °F: 24 °F at 4 °F an hour.
+        expected = ready - timedelta(hours=6, minutes=self.tub.TIMER_MARGIN_MINUTES)
+        self.assertLess(abs((self.starts_at() - expected).total_seconds()), 90)
 
 
 class TestPacificTime(unittest.TestCase):

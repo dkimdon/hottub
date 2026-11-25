@@ -1,8 +1,9 @@
 // "Have it at [104 °F] by [As soon as possible / 7:00 PM ...]  [Set]"
 //
 // One request at a time.  "As soon as possible" sets the setpoint now; a time
-// sets the shared timer, and the API turns the tub off until the timer starts
-// the heating (see "Timer" in api/function/tub.py).  Either replaces the other.
+// sets the shared timer, and the API turns the tub off (ready mode at 50 °F,
+// so it keeps reporting its temperature) until the timer starts the heating
+// (see "Timer" in api/function/tub.py).  Either replaces the other.
 
 import { useState } from "react";
 import { setSetpoint, setTimer } from "./api";

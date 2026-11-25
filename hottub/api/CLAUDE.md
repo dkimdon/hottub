@@ -76,7 +76,13 @@ time (ready time minus heating time minus 20 minutes), so no extra scheduler
 is needed; the change has source `"timer"`.  It never starts during the
 midnight turn-off hour.  One request at a time: setting a timer turns the
 tub off until then, and a setpoint from the UI or the tub's panel removes the
-timer (the nightly turn-off does not).  See "Timer" in `function/tub.py`.
+timer (the nightly turn-off does not).  "Off until then" is the `WAITING`
+state, ready mode at 50 °F, shown to users as "off": it never heats, but the
+tub keeps reporting its temperature (at rest it can go hours without one), so
+the start time uses a real reading.  A reading over an hour old is not used;
+80 °F is assumed instead, starting early rather than late.  Cancelling or
+missing the timer puts the tub back to rest; the nightly turn-off leaves
+`WAITING` alone.  See "Timer" in `function/tub.py`.
 
 The nightly turn-off is an EventBridge schedule that invokes the same Lambda
 with `{"source": "hottub.schedule"}`.

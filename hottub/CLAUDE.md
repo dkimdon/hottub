@@ -49,7 +49,9 @@ control logic must be made in both, with tests in both.
   temperature range, set temperature).  "Off" means rest mode, low range, 50°F.
   The UI asks "have it at [102–106 °F] by [as soon as possible / a time]",
   with Turn off; there is one request at a time (a timer turns the tub off
-  until it starts the heating).
+  until it starts the heating).  While a timer waits, the tub is in ready
+  mode at 50°F rather than rest: it never heats, but it reports the water
+  temperature every cycle, which at rest it may not do for hours.
 - **The most recent change wins.**  A change can come from the web UI, from
   the buttons on the tub (the operator notices and reports it; it becomes the
   desired state until someone next uses the UI), or from the nightly turn-off.

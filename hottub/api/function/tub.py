@@ -56,6 +56,12 @@ ALLOWED_SETPOINTS = ["off"] + [str(t) for t in SETPOINT_TEMPERATURES]
 # not heat during filter cycles either.
 OFF = {"heating_mode": "rest", "temperature_range": "low", "set_temperature": 50}
 
+# Off, but waiting for a timer: ready mode at 50 °F never heats, but unlike
+# rest mode the tub then reports the water temperature every cycle, so the
+# timer knows how long the heating will take.  (At rest the tub can go hours
+# without a reading.)  Users see it as "off".
+WAITING = {"heating_mode": "ready", "temperature_range": "low", "set_temperature": 50}
+
 HEATING_MODES = {"ready", "rest", "ready_in_rest"}
 TEMPERATURE_RANGES = {"high", "low"}
 
@@ -179,11 +185,18 @@ def put_setpoint(event, user):
 # timer turns the tub off until the timer starts it, and a setpoint chosen in
 # the UI or at the tub's panel removes the timer.
 # A timer never starts the heating during the nightly turn-off hour.
+#
+# While a timer waits, the tub is in the WAITING state (off as users see it),
+# so that its temperature is known when the start time is worked out.  If the
+# timer is cancelled or missed, the tub goes back to rest.  The start time
+# uses a reading only if it is under TIMER_FRESH_MINUTES old; otherwise it
+# assumes TIMER_COLD_START, which starts the heating early rather than late.
 
 TIMER_MAX_HOURS = 48
 TIMER_MARGIN_MINUTES = 20
-# Assumed water temperature when there is no reading at all.
+# Assumed water temperature when there is no recent reading.
 TIMER_COLD_START = 80
+TIMER_FRESH_MINUTES = 60
 _TIMER_FIELDS = ("timer_setpoint", "timer_ready_at", "timer_set_by", "timer_set_at")
 
 
@@ -216,21 +229,35 @@ def put_timer(event, user):
         },
     )
     print(f"{user['email']} set a timer: {raw} °F by {ready_at.strftime(_ISO)}")
-    # One request at a time: the tub rests until the timer starts it.
-    desired = _desired(_read())
-    if desired is not None and desired["heating_mode"] == "ready":
-        _set_desired(OFF, source="ui", changed_by=user["email"])
+    # One request at a time: the tub is off (waiting) until the timer starts it.
+    if _desired(_read()) != WAITING:
+        _set_desired(WAITING, source="ui", changed_by=user["email"])
     return respond(200, {"timer": _timer_view(_read(), now_dt)})
 
 
 def delete_timer(event, user):
     _remove_timer()
+    _stop_waiting(user["email"])
     print(f"{user['email']} cancelled the timer")
     return respond(200, {"timer": None})
 
 
 def _remove_timer():
     TABLE.update_item(Key=KEY, UpdateExpression="REMOVE " + ", ".join(_TIMER_FIELDS))
+
+
+def _stop_waiting(changed_by):
+    """Back to rest if the tub is still waiting for a timer that has gone.
+    Leaves any other desired state (e.g. a newer heat request) alone."""
+    item = _read()
+    if _desired(item) != WAITING:
+        return
+    try:
+        _set_desired(OFF, source="ui" if changed_by else "timer", changed_by=changed_by,
+                     only_if_version=int(item["desired_version"]))
+    except ClientError as e:
+        if e.response["Error"]["Code"] != "ConditionalCheckFailedException":
+            raise
 
 
 def _timer_view(item: dict, now_dt):
@@ -256,7 +283,11 @@ def _timer_start(item: dict, now_dt) -> datetime:
     ready = estimate.parse(item["timer_ready_at"])
     target = int(item["timer_setpoint"])
     current = item.get("current_temperature")
-    current = TIMER_COLD_START if current is None else float(current)
+    measured = item.get("temperature_measured_at")
+    if current is None or measured is None             or now_dt - estimate.parse(measured) > timedelta(minutes=TIMER_FRESH_MINUTES):
+        current = TIMER_COLD_START
+    else:
+        current = float(current)
     rate, _ = _heating_rate(item, now_dt)
     needed = timedelta(hours=max(0.0, target - current) / rate)
     start = ready - needed - timedelta(minutes=TIMER_MARGIN_MINUTES)
@@ -278,7 +309,8 @@ def _run_timer(item: dict) -> dict:
         ready = estimate.parse(item["timer_ready_at"])
         if now_dt > ready + timedelta(hours=1):
             # Missed (the operator was away): too late to be useful.
-            _clear_timer(item)
+            if _clear_timer(item):
+                _stop_waiting(None)
             print("Timer expired without starting")
             return _read()
         if now_dt < _timer_start(item, now_dt) or _quiet_hour(now_dt):
@@ -432,8 +464,8 @@ def put_report(event, user):
 def auto_off():
     """Turn the tub off unless it already is.  Invoked by the nightly schedule."""
     desired = _desired(_read())
-    if desired is None or desired["heating_mode"] != "ready":
-        return {"changed": False}
+    if desired is None or desired["heating_mode"] != "ready" or desired == WAITING:
+        return {"changed": False}  # off, or waiting for a timer (not heating)
     _set_desired(OFF, source="schedule", changed_by=None)
     print("Automatic turn-off: tub was on, now set to off")
     return {"changed": True}
@@ -469,7 +501,7 @@ def _setpoint(desired):
     """The setpoint as users see it: "off", or the temperature as a string."""
     if desired is None:
         return None
-    if desired["heating_mode"] != "ready":
+    if desired["heating_mode"] != "ready" or desired == WAITING:
         return "off"
     return str(desired["set_temperature"])
 
