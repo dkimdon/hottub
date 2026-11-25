@@ -7,10 +7,11 @@ Keep it that way unless there is a strong reason.
 ## Files
 
 ```
-src/App.jsx          start-up, signed-in shell, Tub / Users tabs
+src/App.jsx          start-up, signed-in shell, Tub / Users tabs, Help
 src/SignIn.jsx       sign in, first-time password, forgotten password
-src/TubPanel.jsx     temperature, status lines, Turn off / Cancel timer
-src/HeatControl.jsx  "Have it at [104] by [as soon as possible / a time]"
+src/TubPanel.jsx     status card: temperature and status lines (nothing to tap)
+src/HeatControl.jsx  "Heat to [Off] [102]…[106]" buttons, schedule button + form, Cancel timer
+src/Help.jsx         Help page (from "Help" in the header): how changes and timers work
 src/HistoryPanel.jsx      period buttons, graph, table of changes
 src/TemperatureChart.jsx  the graph: hand-written SVG, no chart library
 src/UsersPanel.jsx   admin-only user management
@@ -61,11 +62,14 @@ Deploy with `python ../scripts/deploy.py ui test`.
 - The graph is one line (water temperature) on one axis.  It is drawn at the
   container's real pixel width, breaks where readings are missing, labels only
   the latest value, and shows other values on hover, touch or the arrow keys.
-  The same readings are available as a table below it.
-- One request at a time: "as soon as possible" sets the setpoint (and the
-  API drops any timer); a time sets the shared timer (and the API turns the
-  tub off until the timer starts it).  The controls start from the current
-  request, keyed on it so they reset when it changes.
+- The status card says what the tub is doing; the controls are below it and
+  look like controls.  One request at a time: a "Heat to" button sets the
+  setpoint (and the API drops any timer); "Schedule for later…" sets the
+  shared timer (and the API turns the tub off until the timer starts it).
+  The current setting's button is highlighted; while a timer waits the
+  schedule button ("Scheduled: 104° by 7:00 PM") is highlighted instead.
+- Explanations (changes take a few minutes, the midnight turn-off, timers,
+  the tub's own buttons) live on the Help page, not the main screen.
 - Users cannot register themselves.  An admin adds them; Cognito emails a
   temporary password; the first sign-in forces a new password.
 

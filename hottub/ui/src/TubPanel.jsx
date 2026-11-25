@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { cancelTimer, getTub, setSetpoint } from "./api";
+import { getTub } from "./api";
 import { aboutWhen, ago, secondsSince } from "./format";
 import HeatControl from "./HeatControl";
 import Thermometer from "./Thermometer";
@@ -84,7 +84,6 @@ export default function TubPanel({ onTub }) {
     if (onTub) onTub(tub);
   }, [tub, onTub]);
   const [error, setError] = useState(null);
-  const [saving, setSaving] = useState(false);
   const [now, setNow] = useState(Date.now());
 
   const refresh = useCallback(async () => {
@@ -109,18 +108,6 @@ export default function TubPanel({ onTub }) {
     };
   }, [refresh]);
 
-  // "Turn off" and "Cancel timer"; then show the new state.
-  async function act(action) {
-    setSaving(true);
-    try {
-      await action();
-      await refresh();
-    } catch (e) {
-      setError(e.message);
-    }
-    setSaving(false);
-  }
-
   if (!tub) {
     return error ? <p className="error" role="alert">{error}</p> : <p className="muted">Loading…</p>;
   }
@@ -129,7 +116,6 @@ export default function TubPanel({ onTub }) {
   const problem = warning(tub, now);
   const changedBy = changedBySentence(tub, now);
   const ready = problem ? null : readySentence(tub, now);
-  const heatingNow = tub.setpoint && tub.setpoint !== "off";
 
   return (
     <>
@@ -154,34 +140,13 @@ export default function TubPanel({ onTub }) {
             {ready && <li>{ready}</li>}
             {changedBy && <li>{changedBy}</li>}
           </ul>
-          {tub.timer ? (
-            <button type="button" disabled={saving} onClick={() => act(cancelTimer)}>
-              Cancel timer
-            </button>
-          ) : (
-            heatingNow && (
-              <button type="button" disabled={saving} onClick={() => act(() => setSetpoint("off"))}>
-                Turn off
-              </button>
-            )
-          )}
         </div>
       </section>
 
       {problem && <p className="error" role="alert">{problem}</p>}
       {error && <p className="error" role="alert">{error}</p>}
 
-      {/* Keyed by the current request, so the controls start from it again
-          whenever it changes. */}
-      <HeatControl
-        key={`${tub.setpoint}|${tub.timer ? `${tub.timer.setpoint}@${tub.timer.ready_at}` : ""}`}
-        tub={tub}
-        now={now}
-        onChanged={refresh}
-      />
-      <p className="hint">
-        Changes reach the tub within a few minutes. The tub turns off automatically at midnight.
-      </p>
+      <HeatControl tub={tub} now={now} onChanged={refresh} />
     </>
   );
 }

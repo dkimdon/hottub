@@ -25,13 +25,6 @@ function whoText(change) {
   return change.changed_by || "unknown";
 }
 
-// At most `count` rows, evenly spread, always including the latest.
-function thin(points, count) {
-  if (points.length <= count) return points;
-  const step = (points.length - 1) / (count - 1);
-  return Array.from({ length: count }, (_, i) => points[Math.round(i * step)]);
-}
-
 // The dashed line on the day view, from the latest reading to the setpoint at
 // the estimated time; null when there is no estimate.
 function forecastFor(tub) {
@@ -103,33 +96,6 @@ export default function HistoryPanel({ tub = null }) {
         <>
           <TemperatureChart history={history} forecast={hours === 24 ? forecastFor(tub) : null} />
           {history.stats && <Stats stats={history.stats} hours={hours} />}
-
-          {history.temperatures.length > 0 && (
-            <details>
-              <summary>Show readings as a table</summary>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Time</th>
-                    <th>Water</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {thin(history.temperatures, 24)
-                    .slice()
-                    .reverse()
-                    .map((p) => (
-                      <tr key={p.at}>
-                        <td>{when.format(Date.parse(p.at))}</td>
-                        <td>
-                          {p.temperature} °F{p.heating ? ", heating" : ""}
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </details>
-          )}
 
           <h2 className="changes-title">Changes</h2>
           {history.changes.length === 0 ? (

@@ -93,7 +93,7 @@ export default function SignIn({ onSignedIn }) {
 
   return (
     <main className="card signin">
-      <h1>Hot Tub</h1>
+      <h1>CoHo Hot Tub</h1>
 
       {step === "sign-in" && (
         <form onSubmit={submit(() => signIn(email, password))}>

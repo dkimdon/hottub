@@ -132,17 +132,35 @@ describe("Heat control with a time", () => {
     api.setTimer.mockResolvedValue({ timer });
     render(<TubPanel />);
 
-    await userEvent.selectOptions(await screen.findByLabelText("Have it at"), "105");
+    await userEvent.click(await screen.findByText("Schedule for later…"));
+    await userEvent.selectOptions(screen.getByLabelText("Have it at"), "105");
     await userEvent.selectOptions(screen.getByLabelText("by"), readyAt);
-    await userEvent.click(screen.getByText("Set"));
+    await userEvent.click(screen.getByText("Schedule"));
 
     expect(api.setTimer).toHaveBeenCalledWith(105, readyAt);
     expect(await screen.findByText(/The tub is off until about .*, then heats to 105 °F to be ready by/)).toBeTruthy();
     expect(screen.getByText(/The timer was set by me@example.com/)).toBeTruthy();
-    // The controls now show the timer's request.
+    // The form closes; while the timer waits no button is highlighted.
+    expect(screen.queryByLabelText("by")).toBeNull();
+    // While the timer waits, the schedule button is the highlighted one.
+    const group = screen.getByRole("group", { name: "Heat to" });
+    expect(within(group).queryAllByRole("button", { pressed: true })).toEqual([]);
+    const scheduled = screen.getByRole("button", { name: /^Scheduled: 105° by / });
+    expect(scheduled.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByText("Cancel timer")).toBeTruthy();
+  });
+
+  it("starts the form from the timer, and can close it", async () => {
+    const readyAt = minutesAhead(300);
+    const timer = { setpoint: "106", ready_at: readyAt, set_by: "pat@example.com", set_at: minutesAgo(5), starts_at: minutesAhead(200) };
+    api.getTub.mockResolvedValue(tubState({ setpoint: "off", heating: false, timer }));
+    render(<TubPanel />);
+    await userEvent.click(await screen.findByRole("button", { name: /^Scheduled: 106°/ }));
+    expect(screen.getByLabelText("Have it at").value).toBe("106");
     expect(screen.getByLabelText("by").value).toBe(readyAt);
-    expect(screen.getByText("Set").disabled).toBe(true);
-    expect(screen.queryByText("Turn off")).toBeNull();
+    await userEvent.click(screen.getByText("Never mind"));
+    expect(screen.queryByLabelText("by")).toBeNull();
+    expect(api.setTimer).not.toHaveBeenCalled();
   });
 
   it("cancels a timer", async () => {
@@ -163,9 +181,8 @@ describe("Heat control with a time", () => {
     api.getTub.mockResolvedValue(tubState());
     api.setTimer.mockRejectedValue(new Error("Choose a time at least 10 minutes from now"));
     render(<TubPanel />);
-    const [readyAt] = timeChoices(Date.now())[0];
-    await userEvent.selectOptions(await screen.findByLabelText("by"), readyAt);
-    await userEvent.click(screen.getByText("Set"));
+    await userEvent.click(await screen.findByText("Schedule for later…"));
+    await userEvent.click(screen.getByText("Schedule"));
     expect((await screen.findByRole("alert")).textContent).toMatch(/at least 10 minutes/);
   });
 

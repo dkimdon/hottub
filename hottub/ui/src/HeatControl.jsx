@@ -1,15 +1,22 @@
-// "Have it at [104 °F] by [As soon as possible / 7:00 PM ...]  [Set]"
+// The controls under the status card:
 //
-// One request at a time.  "As soon as possible" sets the setpoint now; a time
-// sets the shared timer, and the API turns the tub off (ready mode at 50 °F,
-// so it keeps reporting its temperature) until the timer starts the heating
-// (see "Timer" in api/function/tub.py).  Either replaces the other.
+//   Heat to:  [Off] [102] [103] [■104■] [105] [106]
+//   [ Schedule for later… ]
+//
+// A temperature button heats to it straight away, and Off turns the tub off;
+// the button for the current setting is highlighted, like a radio button.
+// While a timer waits, the schedule button is the highlighted one instead
+// ("Scheduled: 104° by 7:00 PM"), with Cancel timer beside it.
+// "Schedule for later…" opens a small form: "Have it at [104 °F] by [time]
+// [Schedule]".  There is one request at a time: heating now drops any timer,
+// and a timer leaves the tub off (ready mode at 50 °F, so it keeps reporting
+// the water temperature) until the timer starts the heating.  See "Timer" in
+// api/function/tub.py.
 
 import { useState } from "react";
-import { setSetpoint, setTimer } from "./api";
+import { cancelTimer, setSetpoint, setTimer } from "./api";
 import { aboutWhen } from "./format";
 
-export const ASAP = "asap";
 const SLOT_MINUTES = 30;
 const HOURS_AHEAD = 24;
 
@@ -27,49 +34,37 @@ export function timeChoices(now = Date.now()) {
   return choices;
 }
 
-// What the controls start at: the current request, if there is one.
-function current(tub) {
-  if (tub.timer) return [tub.timer.setpoint, tub.timer.ready_at];
-  if (tub.setpoint && tub.setpoint !== "off" && tub.allowed_setpoints.includes(tub.setpoint)) {
-    return [tub.setpoint, ASAP];
-  }
-  return [null, ASAP];
-}
+const label = (setpoint) => (setpoint === "off" ? "Off" : `${setpoint}°`);
 
-export default function HeatControl({ tub, now, onChanged }) {
+function ScheduleForm({ tub, now, onDone, onCancel }) {
   const temperatures = tub.allowed_setpoints.filter((s) => s !== "off");
-  const [startTemperature, startTime] = current(tub);
+  const choices = timeChoices(now);
+  const timer = tub.timer;
   const [temperature, setTemperature] = useState(
-    startTemperature || (temperatures.includes("104") ? "104" : temperatures[0])
+    timer ? timer.setpoint : temperatures.includes("104") ? "104" : temperatures[0]
   );
-  const [time, setTime] = useState(startTime);
+  const [time, setTime] = useState(timer ? timer.ready_at : choices[0] && choices[0][0]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-
-  const choices = timeChoices(now);
   // Keep the timer's own time selectable even if it is not on the half hour.
-  if (time !== ASAP && !choices.some(([iso]) => iso === time)) {
-    choices.unshift([time, aboutWhen(time, now)]);
-  }
-  const unchanged = temperature === startTemperature && time === startTime;
+  if (time && !choices.some(([iso]) => iso === time)) choices.unshift([time, aboutWhen(time, now)]);
 
   async function submit(event) {
     event.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      if (time === ASAP) await setSetpoint(temperature);
-      else await setTimer(Number(temperature), time);
-      await onChanged();
+      await setTimer(Number(temperature), time);
+      await onDone();
     } catch (e) {
       setError(e.message);
+      setBusy(false);
     }
-    setBusy(false);
   }
 
   return (
-    <form className="heat-control" aria-label="Heat the tub" onSubmit={submit}>
-      <div className="heat-control-row">
+    <form className="schedule" aria-label="Schedule for later" onSubmit={submit}>
+      <div className="schedule-row">
         <label>
           <span>Have it at</span>
           <select value={temperature} onChange={(e) => setTemperature(e.target.value)} disabled={busy}>
@@ -83,19 +78,102 @@ export default function HeatControl({ tub, now, onChanged }) {
         <label>
           <span>by</span>
           <select value={time} onChange={(e) => setTime(e.target.value)} disabled={busy}>
-            <option value={ASAP}>As soon as possible</option>
-            {choices.map(([iso, label]) => (
+            {choices.map(([iso, text]) => (
               <option key={iso} value={iso}>
-                {label}
+                {text}
               </option>
             ))}
           </select>
         </label>
-        <button type="submit" className="primary" disabled={busy || unchanged}>
-          {busy ? "Setting…" : "Set"}
+      </div>
+      <p className="hint">The tub stays off until it is time to start heating.</p>
+      <div className="schedule-row">
+        <button type="submit" className="primary" disabled={busy}>
+          {busy ? "Scheduling…" : "Schedule"}
+        </button>
+        <button type="button" className="link" onClick={onCancel} disabled={busy}>
+          Never mind
         </button>
       </div>
       {error && <p className="error" role="alert">{error}</p>}
     </form>
+  );
+}
+
+export default function HeatControl({ tub, now, onChanged }) {
+  const [pending, setPending] = useState(null);
+  const [error, setError] = useState(null);
+  const [scheduling, setScheduling] = useState(false);
+
+  // With a timer waiting, no button is "current": the status card says what
+  // will happen instead.
+  const current = pending || (tub.timer ? null : tub.setpoint);
+
+  async function act(which, action) {
+    setPending(which);
+    setError(null);
+    try {
+      await action();
+      await onChanged();
+    } catch (e) {
+      setError(e.message);
+    }
+    setPending(null);
+  }
+
+  function heat(setpoint) {
+    if (setpoint !== current) act(setpoint, () => setSetpoint(setpoint));
+  }
+
+  const timer = tub.timer;
+
+  return (
+    <section className="heat-control" aria-label="Change the tub">
+      <h2 id="heat-to">Heat to</h2>
+      <div className="heat-buttons" role="group" aria-labelledby="heat-to">
+        {tub.allowed_setpoints.map((s) => (
+          <button
+            key={s}
+            type="button"
+            aria-pressed={current === s}
+            aria-label={s === "off" ? "Off" : `${s} °F`}
+            disabled={pending !== null}
+            onClick={() => heat(s)}
+          >
+            {label(s)}
+          </button>
+        ))}
+      </div>
+      {error && <p className="error" role="alert">{error}</p>}
+
+      {scheduling ? (
+        <ScheduleForm
+          tub={tub}
+          now={now}
+          onCancel={() => setScheduling(false)}
+          onDone={async () => {
+            await onChanged();
+            setScheduling(false);
+          }}
+        />
+      ) : (
+        <div className="schedule-buttons">
+          <button
+            type="button"
+            className="schedule-button"
+            aria-pressed={Boolean(timer)}
+            disabled={pending !== null}
+            onClick={() => setScheduling(true)}
+          >
+            {timer ? `Scheduled: ${timer.setpoint}° by ${aboutWhen(timer.ready_at, now)}` : "Schedule for later…"}
+          </button>
+          {timer && (
+            <button type="button" disabled={pending !== null} onClick={() => act("cancel", cancelTimer)}>
+              Cancel timer
+            </button>
+          )}
+        </div>
+      )}
+    </section>
   );
 }

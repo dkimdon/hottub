@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { configureApi } from "./api";
 import { configureAuth, currentUser, signOut } from "./auth";
+import Help from "./Help";
 import HistoryPanel from "./HistoryPanel";
 import SignIn from "./SignIn";
 import TubPanel from "./TubPanel";
@@ -48,16 +49,20 @@ export default function App() {
   if (user === null) return <SignIn onSignedIn={async () => setUser(await currentUser())} />;
 
   const showUsers = user.isAdmin && page === "users";
+  const showHelp = page === "help";
 
   return (
     <>
       <header className="topbar">
         <h1>
-          Hot Tub
+          CoHo Hot Tub
           {config.environment !== "live" && <span className="badge">{config.environment}</span>}
         </h1>
         <div className="topbar-user">
           <span className="muted">{user.email}</span>
+          <button className="link" aria-current={showHelp ? "page" : undefined} onClick={() => setPage("help")}>
+            Help
+          </button>
           <button
             className="link"
             onClick={async () => {
@@ -72,7 +77,7 @@ export default function App() {
 
       {user.isAdmin && (
         <nav className="tabs" aria-label="Sections">
-          <button aria-current={!showUsers ? "page" : undefined} onClick={() => setPage("tub")}>
+          <button aria-current={page === "tub" ? "page" : undefined} onClick={() => setPage("tub")}>
             Tub
           </button>
           <button aria-current={showUsers ? "page" : undefined} onClick={() => setPage("users")}>
@@ -81,8 +86,16 @@ export default function App() {
         </nav>
       )}
 
-      <main className="card">{showUsers ? <UsersPanel me={user} /> : <TubPanel onTub={setTub} />}</main>
-      {!showUsers && (
+      <main className="card">
+        {showHelp ? (
+          <Help onBack={() => setPage("tub")} />
+        ) : showUsers ? (
+          <UsersPanel me={user} />
+        ) : (
+          <TubPanel onTub={setTub} />
+        )}
+      </main>
+      {!showUsers && !showHelp && (
         <section className="card">
           <HistoryPanel tub={tub} />
         </section>

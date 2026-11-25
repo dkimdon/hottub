@@ -1,6 +1,6 @@
 {
-  "name": "Hot Tub",
-  "short_name": "Hot Tub",
+  "name": "CoHo Hot Tub",
+  "short_name": "CoHo Hot Tub",
   "description": "See and set the hot tub's temperature.",
   "start_url": "/",
   "scope": "/",

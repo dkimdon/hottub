@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { configureApi } from "./api";
+import Help from "./Help";
 import HistoryPanel from "./HistoryPanel";
 import SignIn from "./SignIn";
 import TubPanel from "./TubPanel";
@@ -133,6 +134,7 @@ function TubAndHistory() {
 createRoot(document.getElementById("root")).render(
   <>
     <TubAndHistory />
+    <section className="card"><Help onBack={() => {}} /></section>
     <section className="card"><UsersPanel me={me} /></section>
     <SignIn onSignedIn={() => {}} />
   </>

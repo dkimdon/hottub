@@ -253,11 +253,17 @@ input[type="radio"] {
 
 /* ---------- Tub ---------- */
 
+/* The status card: what the tub is doing.  Nothing in it but "Cancel timer"
+   can be tapped; the controls are below it. */
 .tub-status {
   display: flex;
   gap: 16px;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
 }
 
 .temperature {
@@ -292,48 +298,118 @@ input[type="radio"] {
   stroke-width: 1;
 }
 
-/* ---------- Heat control: "Have it at [104] by [time] [Set]" ---------- */
+/* ---------- Heat control: "Heat to [Off] [102] ... [106]", "Schedule for later…" ---------- */
 
 .heat-control {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin: 4px 0 12px;
-  padding-top: 14px;
-  border-top: 1px solid var(--border);
+  align-items: flex-start;
+  gap: 10px;
+  margin: 4px 0 4px;
+}
+
+.heat-control h2 {
+  margin: 0;
 }
 
 .heat-control p {
   margin: 0;
 }
 
-.heat-control-row {
+.heat-buttons {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+  width: 100%;
+}
+
+.heat-buttons button,
+.schedule-button {
+  padding: 12px 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.heat-buttons button[aria-pressed="true"],
+.schedule-button[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.heat-buttons button:disabled[aria-pressed="false"] {
+  opacity: 0.55;
+}
+
+.schedule-buttons {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+}
+
+.schedule-buttons > button:not(.schedule-button) {
+  flex: none;
+}
+
+.schedule-button {
+  flex: 1;
+  padding: 12px 10px;
+}
+
+.schedule {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+}
+
+.schedule-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px 12px;
+  gap: 10px 14px;
 }
 
-.heat-control-row label {
+.schedule-row label {
   display: flex;
   align-items: center;
   gap: 8px;
   font-weight: 600;
 }
 
-.heat-control select {
+.schedule select {
   font: inherit;
   font-weight: 400;
   color: var(--text);
-  background: var(--bg);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 8px 10px;
 }
 
-/* "Turn off" / "Cancel timer", under the status lines. */
-.tub-status button {
-  margin-top: 4px;
+/* ---------- Help ---------- */
+
+.help h3 {
+  margin: 18px 0 4px;
+  font-size: 1rem;
+}
+
+.help p {
+  margin: 0;
+}
+
+.help button.link {
+  margin-top: 18px;
+}
+
+.topbar-user button.link[aria-current="page"] {
+  font-weight: 600;
+  text-decoration: none;
 }
 
 .visually-hidden {

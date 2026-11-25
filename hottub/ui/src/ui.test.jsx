@@ -59,13 +59,13 @@ describe("TubPanel", () => {
     expect(screen.getByText(/last change was made by pat@example.com, 10 minutes ago/)).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
 
-    // The controls start from the current request, so "Set" has nothing to do.
-    expect(screen.getByLabelText("Have it at").value).toBe("104");
-    expect(screen.getByLabelText("by").value).toBe("asap");
-    expect(screen.getByText("Set").disabled).toBe(true);
-    const temperatures = [...screen.getByLabelText("Have it at").options].map((o) => o.value);
-    expect(temperatures).toEqual(["102", "103", "104", "105", "106"]);
-    expect(screen.getByText("Turn off")).toBeTruthy();
+    // One button per setting; the current one is highlighted.
+    const buttons = within(screen.getByRole("group", { name: "Heat to" })).getAllByRole("button");
+    expect(buttons.map((b) => b.textContent)).toEqual(["Off", "102°", "103°", "104°", "105°", "106°"]);
+    expect(screen.getByRole("button", { name: "104 °F" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Off" }).getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByText("Schedule for later…").getAttribute("aria-pressed")).toBe("false");
+    expect(screen.queryByText("Cancel timer")).toBeNull();
   });
 
   it("heats to a new temperature as soon as possible", async () => {
@@ -75,12 +75,18 @@ describe("TubPanel", () => {
     api.setSetpoint.mockResolvedValue({});
     render(<TubPanel />);
 
-    await userEvent.selectOptions(await screen.findByLabelText("Have it at"), "106");
-    await userEvent.click(screen.getByText("Set"));
+    await userEvent.click(await screen.findByRole("button", { name: "106 °F" }));
 
     expect(api.setSetpoint).toHaveBeenCalledWith("106");
     expect(await screen.findByText(/last change was made by me@example.com/)).toBeTruthy();
-    expect(screen.getByLabelText("Have it at").value).toBe("106");
+    expect(screen.getByRole("button", { name: "106 °F" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("does nothing when the current setting is tapped again", async () => {
+    api.getTub.mockResolvedValue(tubState());
+    render(<TubPanel />);
+    await userEvent.click(await screen.findByRole("button", { name: "104 °F" }));
+    expect(api.setSetpoint).not.toHaveBeenCalled();
   });
 
   it("can turn the tub off", async () => {
@@ -88,11 +94,11 @@ describe("TubPanel", () => {
     api.setSetpoint.mockResolvedValue({});
     render(<TubPanel />);
 
-    await userEvent.click(await screen.findByText("Turn off"));
+    await userEvent.click(await screen.findByRole("button", { name: "Off" }));
 
     expect(api.setSetpoint).toHaveBeenCalledWith("off");
     expect(await screen.findByText("The tub is at rest (off).")).toBeTruthy();
-    expect(screen.queryByText("Turn off")).toBeNull();
+    expect(screen.getByRole("button", { name: "Off" }).getAttribute("aria-pressed")).toBe("true");
   });
 
   it("shows a failed change and keeps the old setpoint", async () => {
@@ -100,8 +106,7 @@ describe("TubPanel", () => {
     api.setSetpoint.mockRejectedValue(new Error("Could not reach the server."));
     render(<TubPanel />);
 
-    await userEvent.selectOptions(await screen.findByLabelText("Have it at"), "106");
-    await userEvent.click(screen.getByText("Set"));
+    await userEvent.click(await screen.findByRole("button", { name: "106 °F" }));
 
     expect((await screen.findByRole("alert")).textContent).toMatch(/Could not reach the server/);
     expect(screen.getByText(/set to heat to or maintain 104 °F/)).toBeTruthy();
@@ -115,9 +120,9 @@ describe("TubPanel", () => {
 
     expect(await screen.findByText(/buttons on the tub itself/)).toBeTruthy();
     expect(screen.getByText(/maintain 100 °F/)).toBeTruthy();
-    // 100 is not offered, so the controls offer the usual 104 instead.
-    expect(screen.getByLabelText("Have it at").value).toBe("104");
-    expect(screen.getByText("Set").disabled).toBe(false);
+    // 100 is not offered, so no button is highlighted.
+    const group = screen.getByRole("group", { name: "Heat to" });
+    expect(within(group).queryAllByRole("button", { pressed: true })).toEqual([]);
   });
 
   it("describes the automatic turn-off", async () => {
@@ -244,13 +249,6 @@ describe("HistoryPanel", () => {
     expect(rows[1].textContent).toMatch(/Rest \(off\).*automatic turn-off/);
     expect(rows[2].textContent).toMatch(/100 °F.*at the tub/);
     expect(rows[3].textContent).toMatch(/104 °F.*pat@example.com/);
-  });
-
-  it("offers the readings as a table", async () => {
-    api.getHistory.mockResolvedValue(history());
-    render(<HistoryPanel />);
-    await userEvent.click(await screen.findByText("Show readings as a table"));
-    expect(screen.getByText("98.5 °F, heating")).toBeTruthy();
   });
 
   it("reads values from the keyboard", async () => {

@@ -47,8 +47,8 @@ control logic must be made in both, with tests in both.
   users and grant admin rights, from the Users tab of the same web UI.
 - **Desired state** is stored as the tub's three controls (heating mode,
   temperature range, set temperature).  "Off" means rest mode, low range, 50°F.
-  The UI asks "have it at [102–106 °F] by [as soon as possible / a time]",
-  with Turn off; there is one request at a time (a timer turns the tub off
+  The UI has "Heat to [Off] [102]…[106]" buttons and "Schedule for later…"
+  ("have it at [102–106 °F] by [a time]"); there is one request at a time (a timer turns the tub off
   until it starts the heating).  While a timer waits, the tub is in ready
   mode at 50°F rather than rest: it never heats, but it reports the water
   temperature every cycle, which at rest it may not do for hours.

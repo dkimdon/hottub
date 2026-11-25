@@ -112,21 +112,33 @@ Resources:
       AdminCreateUserConfig:
         AllowAdminCreateUserOnly: true
         InviteMessageTemplate:
-          EmailSubject: Your hot tub account
+          EmailSubject: Your CoHo hot tub account
           EmailMessage: !Sub
             - >-
-              You have been given access to the hot tub controls at
+              You have been given access to the CoHo hot tub controls at
               https://${UiHost} <br><br>
               Sign in with the email address {username} and the temporary
               password {####} <br><br>
               You will be asked to choose your own password the first time you
               sign in.  The temporary password stops working after 7 days.
             - UiHost: !If [HasDomain, !Ref UiDomainName, !GetAtt UiDistribution.DomainName]
+      # Used for "Forgot your password?" codes.
+      VerificationMessageTemplate:
+        DefaultEmailOption: CONFIRM_WITH_CODE
+        EmailSubject: Your CoHo hot tub password reset code
+        EmailMessage: !Sub
+          - >-
+            Your code for resetting your CoHo hot tub password is {####}
+            <br><br>
+            Enter it on the sign-in page at https://${UiHost} to choose a new
+            password.  If you did not ask to reset your password, you can
+            ignore this email.
+          - UiHost: !If [HasDomain, !Ref UiDomainName, !GetAtt UiDistribution.DomainName]
       EmailConfiguration: !If
         - HasEmail
         - EmailSendingAccount: DEVELOPER
           SourceArn: !Ref EmailIdentityArn
-          From: !Sub Hot Tub <${EmailFrom}>
+          From: !Sub CoHo Hot Tub <${EmailFrom}>
         - EmailSendingAccount: COGNITO_DEFAULT
       AccountRecoverySetting:
         RecoveryMechanisms:
