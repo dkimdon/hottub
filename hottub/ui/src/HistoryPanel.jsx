@@ -38,6 +38,9 @@ function forecastFor(tub) {
   };
 }
 
+// Changes shown per page of the table.
+export const PAGE_SIZE = 10;
+
 const PERIOD_TEXT = { 24: "in the last day", 168: "in the last week", 720: "in the last 30 days" };
 
 // "Heater on for 23 hours in the last 30 days · Set to a temperature 14 times"
@@ -57,10 +60,30 @@ function Stats({ stats, hours }) {
   );
 }
 
+// "‹ Newer   11–20 of 34   Older ›" (the newest changes come first).
+function Pager({ page, count, onPage }) {
+  const first = page * PAGE_SIZE + 1;
+  const last = Math.min(count, (page + 1) * PAGE_SIZE);
+  return (
+    <nav className="pager" aria-label="Pages of changes">
+      <button type="button" disabled={page === 0} onClick={() => onPage(page - 1)}>
+        ‹ Newer
+      </button>
+      <span>
+        {first}–{last} of {count}
+      </span>
+      <button type="button" disabled={last >= count} onClick={() => onPage(page + 1)}>
+        Older ›
+      </button>
+    </nav>
+  );
+}
+
 export default function HistoryPanel({ tub = null }) {
   const [hours, setHours] = useState(24);
   const [history, setHistory] = useState(null);
   const [error, setError] = useState(null);
+  const [page, setPage] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -68,6 +91,7 @@ export default function HistoryPanel({ tub = null }) {
       .then((loaded) => {
         if (cancelled) return;
         setHistory(loaded);
+        setPage(0);
         setError(null);
       })
       .catch((e) => !cancelled && setError(e.message));
@@ -110,7 +134,7 @@ export default function HistoryPanel({ tub = null }) {
                 </tr>
               </thead>
               <tbody>
-                {history.changes.map((change) => (
+                {history.changes.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((change) => (
                   <tr key={change.at}>
                     <td>{when.format(Date.parse(change.at))}</td>
                     <td>{setpointText(change.setpoint)}</td>
@@ -119,6 +143,9 @@ export default function HistoryPanel({ tub = null }) {
                 ))}
               </tbody>
             </table>
+          )}
+          {history.changes.length > PAGE_SIZE && (
+            <Pager page={page} count={history.changes.length} onPage={setPage} />
           )}
         </>
       )}

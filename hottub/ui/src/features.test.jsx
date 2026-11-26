@@ -58,13 +58,22 @@ describe("Thermometer", () => {
     const { container } = render(<Thermometer value={101} setpoint={104} heating />);
     expect(screen.getByRole("img", { name: /101 degrees Fahrenheit, set to 104, heating/ })).toBeTruthy();
     expect(container.querySelector(".thermometer-target")).toBeTruthy();
-    expect(container.querySelectorAll(".thermometer-bubble").length).toBe(3);
+    expect(container.querySelectorAll(".thermometer-bubble").length).toBe(8);
   });
 
   it("has no marker when off and no bubbles when not heating", () => {
     const { container } = render(<Thermometer value={90} setpoint={null} heating={false} />);
     expect(container.querySelector(".thermometer-target")).toBeNull();
     expect(container.querySelectorAll(".thermometer-bubble").length).toBe(0);
+    expect(container.querySelector(".thermometer-icicle")).toBeNull();
+  });
+
+  it("is frozen when the tub is off", () => {
+    const { container } = render(<Thermometer value={70} frozen />);
+    expect(screen.getByRole("img", { name: /70 degrees Fahrenheit, off/ })).toBeTruthy();
+    expect(container.querySelector(".thermometer-snowcap")).toBeTruthy();
+    expect(container.querySelectorAll(".thermometer-icicle").length).toBeGreaterThan(0);
+    expect(container.querySelectorAll(".snowflake").length).toBeGreaterThan(0);
   });
 });
 
@@ -208,6 +217,6 @@ describe("Duckling picture", () => {
     const { container } = render(<TubArt state="off" />);
     expect(screen.getByRole("img", { name: /frozen tub/ }).getAttribute("src")).toBe("/tub-off.webp");
     expect(container.querySelector(".art-effects").getAttribute("aria-hidden")).toBe("true");
-    expect(container.querySelectorAll(".art-snow").length).toBe(8);
+    expect(container.querySelectorAll(".art-snow").length).toBe(10);
   });
 });

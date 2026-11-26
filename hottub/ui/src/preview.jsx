@@ -7,7 +7,9 @@ import { configureApi } from "./api";
 import Help from "./Help";
 import HistoryPanel from "./HistoryPanel";
 import SignIn from "./SignIn";
+import Thermometer from "./Thermometer";
 import TubArt from "./TubArt";
+import TubFooter from "./TubFooter";
 import TubPanel from "./TubPanel";
 import UsersPanel from "./UsersPanel";
 import "./styles.css";
@@ -98,6 +100,13 @@ const fixtures = {
         { at: ago(600), setpoint: "off", source: "schedule", changed_by: null },
         { at: ago(900), setpoint: "100", source: "panel", changed_by: null },
         { at: ago(1000), setpoint: "106", source: "ui", changed_by: "sam@example.com" },
+        // More, so the table has pages.
+        ...Array.from({ length: hours === 24 ? 9 : hours / 24 }, (_, i) => ({
+              at: ago(hours === 24 ? 1100 + i * 35 : 1440 + i * 1440),
+              setpoint: i % 3 ? "104" : "off",
+              source: i % 3 ? "ui" : "schedule",
+              changed_by: i % 3 ? "pat.example@example.com" : null,
+            })),
       ],
     };
   },
@@ -127,6 +136,7 @@ function TubAndHistory() {
   return (
     <>
       <main className="card wooden"><TubPanel onTub={setTub} /></main>
+      <TubFooter onSignOut={() => {}} />
       <section className="card wooden"><HistoryPanel tub={tub} /></section>
     </>
   );
@@ -136,6 +146,7 @@ createRoot(document.getElementById("root")).render(
   <>
     <nav className="tabs" aria-label="Sections">
       <button aria-current="page">Tub</button>
+      <button>History</button>
       <button>Help</button>
       <button>Users</button>
     </nav>
@@ -145,14 +156,17 @@ createRoot(document.getElementById("root")).render(
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center" }}>
         {["heating", "hot", "off", "waiting"].map((s) => (
           <div key={s} style={{ textAlign: "center" }}>
-            <TubArt state={s} />
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Thermometer value={s === "off" ? 68 : 101} setpoint={s === "off" ? null : 104} heating={s === "heating"} frozen={s === "off"} />
+              <TubArt state={s} />
+            </div>
             <span className="muted">{s}</span>
           </div>
         ))}
       </div>
     </section>
-    <section className="card"><Help onSignOut={() => {}} /></section>
-    <section className="card"><UsersPanel me={me} onSignOut={() => {}} /></section>
+    <section className="card"><Help /></section>
+    <section className="card"><UsersPanel me={me} /></section>
     <SignIn onSignedIn={() => {}} />
   </>
 );

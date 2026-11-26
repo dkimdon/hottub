@@ -141,6 +141,21 @@ p {
   border-radius: 10px;
   overflow: hidden;
 }
+
+/* Keep the text in from the table's rounded edges. */
+.wooden th:first-child,
+.wooden td:first-child {
+  padding-left: 14px;
+}
+
+.wooden th:last-child,
+.wooden td:last-child {
+  padding-right: 14px;
+}
+
+.wooden tr:last-child td {
+  border-bottom: none;
+}
 .muted,
 .hint {
   color: var(--muted);
@@ -268,8 +283,57 @@ input[type="radio"] {
   margin-bottom: 12px;
 }
 
-.sign-out {
-  margin-top: 24px;
+/* Under the tub card: a phrase about soaking with friends on the left, Sign out on the right. */
+.tub-footer {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin: -4px 4px 0;
+  font-size: 0.8125rem;
+}
+
+.tub-footer button {
+  border: none;
+  background: none;
+  padding: 4px 0;
+  font: inherit;
+  color: var(--muted);
+}
+
+.tub-tip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  font-style: italic;
+  cursor: pointer;
+}
+
+.tub-phrase {
+  animation: phrase-in 0.8s ease-out;
+}
+
+@keyframes phrase-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tub-phrase {
+    animation: none;
+  }
+}
+
+.tub-tip img {
+  flex: none;
+  border-radius: 50%;
+}
+
+.tub-footer .link-button {
+  flex: none;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .tabs button {
@@ -492,9 +556,43 @@ input[type="radio"] {
   100% { transform: translateY(var(--rise)); opacity: 0; }
 }
 
+/* Off: the thermometer is frozen too (Thermometer.jsx). */
+.thermometer.frozen .thermometer-tube {
+  fill: #e4f3fd;
+  stroke: #7fb8e4;
+  stroke-width: 2.5;
+}
+
+.thermometer-snowcap {
+  fill: #ffffff;
+  stroke: #a9cfee;
+  stroke-width: 1;
+}
+
+.thermometer-icicle {
+  fill: rgba(214, 238, 252, 0.95);
+  stroke: #6fa9d8;
+  stroke-width: 1;
+  stroke-linejoin: round;
+}
+
+.thermometer-flake-fall {
+  animation: thermometer-snow 6s linear infinite;
+}
+
+@keyframes thermometer-snow {
+  0% { transform: translate(0, -8px); opacity: 0; }
+  10% { opacity: 1; }
+  50% { transform: translate(3px, 90px); }
+  90% { opacity: 1; }
+  100% { transform: translate(-2px, 195px); opacity: 0; }
+}
+
 /* ---------- The duckling picture (TubArt.jsx) ---------- */
 
-/* As big as fits beside the thermometer, up to 210 px; smaller on phones. */
+/* As big as fits beside the thermometer, up to 210 px.  On a phone the
+   sentences wrap below, and the ducks grow to fill the rest of the
+   thermometer's line (tighter padding there gives them more room). */
 .tub-art {
   position: relative;
   flex: 0 1 210px;
@@ -502,8 +600,16 @@ input[type="radio"] {
 }
 
 @media (max-width: 480px) {
+  .card {
+    padding: 14px;
+  }
+  .tub-status-row {
+    gap: 10px 10px;
+    padding: 10px;
+  }
   .tub-art {
-    flex-basis: 140px;
+    flex: 1 1 110px;
+    max-width: 260px;
   }
 }
 
@@ -582,28 +688,37 @@ input[type="radio"] {
 
 /* Off: snow falls. */
 .art-snow {
-  left: calc(6% + var(--i) * 12%);
-  top: -6px;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 0 3px rgba(120, 170, 220, 0.8);
-  animation: art-snow 5s infinite linear;
-  animation-delay: calc(var(--i) * -0.7s);
+  top: -10px;
+  margin-left: -6px;
+  line-height: 0;
+  animation: art-snow 6s infinite linear;
 }
 
-.art-snow:nth-child(odd) {
-  width: 3px;
-  height: 3px;
-  animation-duration: 6.5s;
+/* Snowflakes on the thermometer and the ducklings (Snowflake.jsx). */
+.snowflake {
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 1.2px rgba(50, 110, 180, 1));
+}
+
+.snowflake .flake-dot {
+  fill: #ffffff;
+  stroke: none;
+}
+
+.art-snow svg {
+  overflow: visible;
 }
 
 @keyframes art-snow {
   0% { transform: translate(0, 0); opacity: 0; }
   10% { opacity: 1; }
-  50% { transform: translate(5px, 60px); }
-  100% { transform: translate(-3px, 120px); opacity: 0.9; }
+  50% { transform: translate(5px, 80px); }
+  90% { opacity: 1; }
+  100% { transform: translate(-3px, 170px); opacity: 0; }
 }
 
 /* Waiting: z's float up from the sleepers. */
@@ -633,6 +748,7 @@ input[type="radio"] {
   .art-effects span {
     animation: none;
   }
+  .thermometer-flake-fall,
   .art-snow,
   .art-bubble,
   .art-steam,
@@ -697,6 +813,28 @@ input[type="radio"] {
   color: var(--accent);
   font-weight: 600;
   position: relative;
+}
+
+/* "‹ Newer  11–20 of 34  Older ›" under the changes table. */
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.pager span {
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.875rem;
+}
+
+.pager button:disabled {
+  opacity: 0.55;
+  cursor: default;
 }
 
 .chart {

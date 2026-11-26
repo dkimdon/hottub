@@ -8,15 +8,21 @@ Keep it that way unless there is a strong reason.
 ## Files
 
 ```
-src/App.jsx          start-up, signed-in shell, Tub / Help / Users tabs (no header)
+src/App.jsx          start-up, signed-in shell, Tub / History / Help / Users tabs (no header)
 src/SignIn.jsx       sign in, first-time password, forgotten password
 src/TubPanel.jsx     status card: temperature and status lines (nothing to tap)
 src/HeatControl.jsx  "Heat to [Off] [102]…[106]" buttons, schedule button + form, Cancel timer
-src/Help.jsx         Help tab: how changes and timers work; Sign out
-src/HistoryPanel.jsx      period buttons, graph, table of changes
+src/Help.jsx         Help tab: how changes and timers work
+src/HistoryPanel.jsx      History tab: period buttons, graph, table of changes
+                          (10 per page, newest first)
 src/TemperatureChart.jsx  the graph: hand-written SVG, no chart library
-src/UsersPanel.jsx   admin-only user management; Sign out
-src/Thermometer.jsx  SVG thermometer
+src/UsersPanel.jsx   admin-only user management
+src/TubFooter.jsx    under the tub card: phrases about soaking with friends
+                     (change every 9 s, or tap) and the only Sign out
+src/Thermometer.jsx  SVG thermometer: bubbles while heating; snow cap, icicles
+                     and falling snowflakes when the tub is off
+src/Snowflake.jsx    snowflake shapes and placements, shared by the frozen
+                     thermometer and the frozen ducklings
 src/TubArt.jsx       duckling picture for the tub's state (heating / hot / off /
                      waiting), beside the thermometer, with CSS animation
 src/temperatureColours.jsx  colour scale (icy white → blue → purple → red)
@@ -65,7 +71,7 @@ Deploy with `python ../scripts/deploy.py ui test`.
 - Whether to show the Users tab comes from the `cognito:groups` claim.  That is
   a convenience only: the API enforces admin rights itself.
 - The tub panel refreshes every 30 seconds and when the page becomes visible.
-  It passes its state up to `App`, which hands it to the history panel for
+  It passes its state up to `App`, which hands it to the History tab for
   the forecast (a dashed line to the setpoint at the estimated time, day
   view only).
 - The graph is one line (water temperature) on one axis.  It is drawn at the

@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as api from "./api";
 import App from "./App";
+import { PHRASES } from "./TubFooter";
 import * as auth from "./auth";
 
 vi.mock("./api");
@@ -42,29 +43,35 @@ afterEach(() => {
 });
 
 describe("App", () => {
-  it("starts up and shows the tub, with Tub and Help tabs", async () => {
+  it("starts up and shows the tub, with Tub, History and Help tabs", async () => {
     auth.currentUser.mockResolvedValue({ username: "u", email: "me@example.com", isAdmin: false });
     render(<App />);
     expect(await screen.findByText("101°F")).toBeTruthy();
     const tabs = screen.getByRole("navigation", { name: "Sections" });
-    expect([...tabs.querySelectorAll("button")].map((b) => b.textContent)).toEqual(["Tub", "Help"]);
+    expect([...tabs.querySelectorAll("button")].map((b) => b.textContent)).toEqual(["Tub", "History", "Help"]);
     // No email on the page.
     expect(screen.queryByText("me@example.com")).toBeNull();
   });
 
-  it("signs out from the Help tab", async () => {
-    auth.currentUser.mockResolvedValue({ username: "u", email: "me@example.com", isAdmin: false });
+  it("signs out from the bottom of the Tub tab, and only there", async () => {
+    auth.currentUser.mockResolvedValue({ username: "u", email: "me@example.com", isAdmin: true });
     render(<App />);
-    await userEvent.click(await screen.findByRole("button", { name: "Help" }));
-    await userEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    await screen.findByText("101°F");
+    const phrase = document.querySelector(".tub-phrase").textContent;
+    expect(PHRASES).toContain(phrase);
+    for (const tab of ["History", "Help", "Users"]) {
+      await userEvent.click(screen.getByRole("button", { name: tab }));
+      expect(screen.queryByRole("button", { name: "Sign out" })).toBeNull();
+    }
+    await userEvent.click(screen.getByRole("button", { name: "Tub" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Sign out" }));
     expect(auth.signOut).toHaveBeenCalled();
   });
 
-  it("gives admins a Users tab with Sign out", async () => {
+  it("gives admins a Users tab", async () => {
     auth.currentUser.mockResolvedValue({ username: "u", email: "me@example.com", isAdmin: true });
     render(<App />);
     await userEvent.click(await screen.findByRole("button", { name: "Users" }));
     expect(await screen.findByRole("heading", { name: "Users" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Sign out" })).toBeTruthy();
   });
 });

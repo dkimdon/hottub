@@ -4,6 +4,8 @@
 // are in public/ (made by ../scripts/make_images.ps1); the animation is CSS
 // and stops for people who ask their phone for reduced motion.
 
+import { FlakeShape, TUB_FLAKES } from "./Snowflake";
+
 const ART = {
   heating: ["tub-heating.webp", "A duckling pours a steaming kettle into the tub"],
   hot: ["tub-hot.webp", "Ducklings relaxing in a warm, bubbly wooden tub"],
@@ -29,7 +31,21 @@ const EFFECTS = {
     </>
   ),
   hot: [0, 1, 2, 3, 4].map((i) => <span key={i} className="art-bubble" style={{ "--i": i }} />),
-  off: [0, 1, 2, 3, 4, 5, 6, 7].map((i) => <span key={i} className="art-snow" style={{ "--i": i }} />),
+  // The same snowflakes as the frozen thermometer beside it.
+  off: TUB_FLAKES.map(([across, size, kind, duration, delay]) => {
+    const box = size * 2 + 4;
+    return (
+      <span
+        key={across}
+        className="art-snow"
+        style={{ left: `${across * 100}%`, animationDuration: `${duration}s`, animationDelay: `${delay}s` }}
+      >
+        <svg className="snowflake" width={box} height={box} viewBox={`${-box / 2} ${-box / 2} ${box} ${box}`}>
+          <FlakeShape kind={kind} size={size} />
+        </svg>
+      </span>
+    );
+  }),
   waiting: [0, 1, 2].map((i) => (
     <span key={i} className="art-z" style={{ "--i": i }}>
       z

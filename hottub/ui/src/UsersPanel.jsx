@@ -6,7 +6,7 @@ const STATUS_LABELS = {
   RESET_REQUIRED: "Password reset sent",
 };
 
-export default function UsersPanel({ me, onSignOut }) {
+export default function UsersPanel({ me }) {
   const [users, setUsers] = useState(null);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
@@ -147,14 +147,6 @@ export default function UsersPanel({ me, onSignOut }) {
         </label>
         <button className="primary" disabled={busy}>Add user</button>
       </form>
-
-      {onSignOut && (
-        <p className="sign-out">
-          <button type="button" onClick={onSignOut}>
-            Sign out
-          </button>
-        </p>
-      )}
     </>
   );
 }

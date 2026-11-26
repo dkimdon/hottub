@@ -1,7 +1,6 @@
-// The Help tab.  Sign out is here too, so everyone can reach it (admins also
-// have it on the Users tab).
+// The Help tab.
 
-export default function Help({ onSignOut }) {
+export default function Help() {
   return (
     <div className="help">
       <h2>Help</h2>
@@ -9,7 +8,7 @@ export default function Help({ onSignOut }) {
       <h3>Heating the tub</h3>
       <p>
         Tap a temperature under <strong>Heat to</strong> and the tub starts heating to it. Tap{" "}
-        <strong>Off</strong> to turn it off. The highlighted button is the current setting.
+        <strong>Off</strong> to turn the tub off. The highlighted button is the current setting.
       </p>
 
       <h3>Changes take a few minutes</h3>
@@ -22,13 +21,13 @@ export default function Help({ onSignOut }) {
       <p>
         <strong>Schedule for later…</strong> lets you choose a temperature and the time you want the tub ready.
         The tub stays off until it is time to start, then heats so it is ready by the time you chose. There is one
-        request at a time: heating now, turning off, or scheduling again replaces the timer. Use{" "}
-        <strong>Cancel timer</strong> to drop it.
+        request at a time: heating now, turning off, or scheduling again replaces the timer. To call off a
+        timer, tap <strong>Cancel timer</strong>; the tub stays off.
       </p>
 
-      <h3>It turns off at midnight</h3>
+      <h3>The tub turns off at midnight</h3>
       <p>
-        The tub turns itself off automatically at midnight, so it is never left heating overnight. It cannot be
+        The tub turns itself off automatically at midnight, so it is never left heating overnight. The tub cannot be
         turned on, and timers cannot start, between midnight and 1 AM.
       </p>
 
@@ -36,12 +35,6 @@ export default function Help({ onSignOut }) {
       <p>
         A change made with the tub's own buttons replaces whatever was set on this page, and the page shows that it
         was made at the tub. Whoever changes it last wins.
-      </p>
-
-      <p className="sign-out">
-        <button type="button" onClick={onSignOut}>
-          Sign out
-        </button>
       </p>
     </div>
   );

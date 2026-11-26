@@ -4,6 +4,7 @@ import { configureAuth, currentUser, signOut } from "./auth";
 import Help from "./Help";
 import HistoryPanel from "./HistoryPanel";
 import SignIn from "./SignIn";
+import TubFooter from "./TubFooter";
 import TubPanel from "./TubPanel";
 import UsersPanel from "./UsersPanel";
 
@@ -21,7 +22,8 @@ export default function App() {
   const [config, setConfig] = useState(null);
   const [startupError, setStartupError] = useState(null);
   const [page, setPage] = useState("tub");
-  // The tub panel's latest state, shared with the history graph's forecast.
+  // The tub panel's latest state, for the history graph's forecast (seen
+  // once the Tub tab has loaded, which it does first).
   const [tub, setTub] = useState(null);
 
   useEffect(() => {
@@ -49,7 +51,7 @@ export default function App() {
   if (user === null) return <SignIn onSignedIn={async () => setUser(await currentUser())} />;
 
   const current = page === "users" && !user.isAdmin ? "tub" : page;
-  const tabs = [["tub", "Tub"], ["help", "Help"], ...(user.isAdmin ? [["users", "Users"]] : [])];
+  const tabs = [["tub", "Tub"], ["history", "History"], ["help", "Help"], ...(user.isAdmin ? [["users", "Users"]] : [])];
   async function leave() {
     await signOut();
     setUser(null);
@@ -72,19 +74,22 @@ export default function App() {
           <main className="card wooden">
             <TubPanel onTub={setTub} />
           </main>
-          <section className="card wooden">
-            <HistoryPanel tub={tub} />
-          </section>
+          <TubFooter onSignOut={leave} />
         </>
+      )}
+      {current === "history" && (
+        <main className="card wooden">
+          <HistoryPanel tub={tub} />
+        </main>
       )}
       {current === "help" && (
         <main className="card">
-          <Help onSignOut={leave} />
+          <Help />
         </main>
       )}
       {current === "users" && (
         <main className="card">
-          <UsersPanel me={user} onSignOut={leave} />
+          <UsersPanel me={user} />
         </main>
       )}
     </>

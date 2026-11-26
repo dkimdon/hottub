@@ -251,6 +251,31 @@ describe("HistoryPanel", () => {
     expect(rows[3].textContent).toMatch(/104 °F.*pat@example.com/);
   });
 
+  it("pages through many changes, newest first", async () => {
+    const changes = Array.from({ length: 23 }, (_, i) => ({
+      at: minutesAgo(10 + i * 30),
+      setpoint: "104",
+      source: "ui",
+      changed_by: `user${i}@example.com`,
+    }));
+    api.getHistory.mockResolvedValue(history({ changes }));
+    const { container } = render(<HistoryPanel />);
+    const rows = async () => within(container.querySelector("table.changes")).getAllByRole("row").slice(1);
+
+    await screen.findByText("1–10 of 23");
+    expect((await rows())[0].textContent).toMatch(/user0@/);
+    expect(screen.getByRole("button", { name: "‹ Newer" }).disabled).toBe(true);
+
+    await userEvent.click(screen.getByRole("button", { name: "Older ›" }));
+    await userEvent.click(screen.getByRole("button", { name: "Older ›" }));
+    expect(screen.getByText("21–23 of 23")).toBeTruthy();
+    expect((await rows()).length).toBe(3);
+    expect(screen.getByRole("button", { name: "Older ›" }).disabled).toBe(true);
+
+    await userEvent.click(screen.getByRole("button", { name: "‹ Newer" }));
+    expect((await rows())[0].textContent).toMatch(/user10@/);
+  });
+
   it("reads values from the keyboard", async () => {
     api.getHistory.mockResolvedValue(history());
     render(<HistoryPanel />);

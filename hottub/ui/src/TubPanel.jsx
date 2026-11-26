@@ -133,6 +133,7 @@ export default function TubPanel({ onTub }) {
             value={temperature}
             setpoint={tub.setpoint && tub.setpoint !== "off" ? Number(tub.setpoint) : null}
             heating={Boolean(tub.heating)}
+            frozen={artState(tub) === "off"}
           />
           <TubArt state={artState(tub)} />
           <div>
