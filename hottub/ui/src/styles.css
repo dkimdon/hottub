@@ -5,6 +5,8 @@
   --text: #17242d;
   --muted: #5d6f7b;
   --border: #d3dce2;
+  --page-muted: #5d6f7b;
+  --page-border: #d3dce2;
   /* Colours follow the thermometer's scale in Thermometer.jsx: icy blue,
      darker blue, purple, red.  Blue is a shade deeper than the thermometer's
      #2f6fd6 so that text in it is readable on the light backgrounds. */
@@ -17,11 +19,15 @@
   --ok: #2a66cc;
   --warm: #d62828;
   --line-edge: #8a9aa5;
-  /* The tub's wood, for the header sign: painted staves.  (A wood texture
-     image could go in front of this: url("/wood.jpg") center / 320px auto
-     repeat, from make_images.ps1.) */
-  --wood-staves: repeating-linear-gradient(90deg, #d79f61 0 34px, #c4884a 34px 35px, #9c6430 35px 37px);
-  --wood-text: #fff8ec;
+  /* The tub's wood, for the header sign and the plaques behind section
+     titles: the painted planks (wood.jpg, from make_images.ps1) under a
+     brown wash, with a plain wood colour in case the picture has not
+     loaded. */
+  --wood-wash: rgba(70, 35, 5, 0.2);
+  --wood: linear-gradient(var(--wood-wash), var(--wood-wash)), url("/wood.jpg") 0 0 / 450px auto repeat, #c98a45;
+  --wood-text: #3a1d04;
+  --wood-muted: #4d2c0e;
+  --wood-text-shadow: 0 1px 0 rgba(255, 236, 200, 0.6);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -31,6 +37,8 @@
     --text: #e8eef1;
     --muted: #9fb0ba;
     --border: #33434d;
+    --page-muted: #9fb0ba;
+    --page-border: #33434d;
     /* Lighter tints of the same scale, readable on the dark backgrounds. */
     --accent: #8ccdf0;
     --accent-text: #0b1b22;
@@ -87,6 +95,55 @@ p {
   padding: 20px;
 }
 
+/* The tub and history cards are wooden boards: the wood fills the space
+   between the controls, and the boxes on it (status, schedule form, graph,
+   table of changes) keep the page's own colours. */
+.card.wooden {
+  background: var(--wood);
+  border-color: rgba(80, 40, 10, 0.45);
+  color: var(--wood-text);
+  --muted: var(--wood-muted);
+  --border: rgba(80, 40, 10, 0.4);
+}
+
+/* Words straight on the wood (here and in the header) get a soft cream
+   glow that fades into the grain, so they read easily without a box. */
+.card.wooden h2,
+.wooden .stats > span,
+.wooden p.muted,
+.topbar-user .muted,
+.topbar-user button.link {
+  display: inline-block;
+  padding: 4px 14px;
+  margin: -4px -6px;
+  background: radial-gradient(closest-side, rgba(255, 244, 225, 0.55), rgba(255, 244, 225, 0.3) 55%, transparent);
+  color: #2b1603;
+  text-shadow: 0 0 3px rgba(255, 242, 220, 0.9), 0 0 8px rgba(255, 242, 220, 0.7), 0 0 14px rgba(255, 242, 220, 0.45);
+}
+
+.wooden .stats strong {
+  color: inherit;
+}
+
+.wooden .tub-status,
+.wooden .schedule,
+.wooden .chart,
+.wooden table {
+  color: var(--text);
+  --muted: var(--page-muted);
+  --border: var(--page-border);
+}
+
+.wooden .chart {
+  background: var(--surface);
+  border-radius: 10px;
+}
+
+.wooden table {
+  background: var(--surface);
+  border-radius: 10px;
+  overflow: hidden;
+}
 .muted,
 .hint {
   color: var(--muted);
@@ -216,10 +273,10 @@ input[type="radio"] {
   margin-bottom: 12px;
   padding: 10px 14px;
   border-radius: 12px;
-  background: var(--wood-staves);
+  background: var(--wood);
   color: var(--wood-text);
   box-shadow: inset 0 -3px 0 rgba(80, 40, 10, 0.25), 0 1px 3px rgba(0, 0, 0, 0.15);
-  text-shadow: 0 1px 2px rgba(70, 35, 5, 0.7);
+  text-shadow: var(--wood-text-shadow);
 }
 
 .topbar .badge {
@@ -276,9 +333,9 @@ input[type="radio"] {
 
 /* The status card: what the tub is doing.  The thermometer and the
    ducklings' tub sit side by side, the sentences beside them (or below them on
-   a narrow phone).  Nothing in it can be tapped; the controls are below it. */
+   a narrow phone).  Nothing in it can be tapped; it comes after the controls. */
 .tub-status {
-  margin-bottom: 18px;
+  margin-top: 18px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--bg);
@@ -475,11 +532,17 @@ input[type="radio"] {
 
 /* ---------- The duckling picture (TubArt.jsx) ---------- */
 
-/* As big as fits beside the thermometer, up to 250 px. */
+/* As big as fits beside the thermometer, up to 210 px; smaller on phones. */
 .tub-art {
   position: relative;
-  flex: 0 1 250px;
+  flex: 0 1 210px;
   min-width: 0;
+}
+
+@media (max-width: 480px) {
+  .tub-art {
+    flex-basis: 140px;
+  }
 }
 
 .tub-art img {
@@ -601,10 +664,6 @@ input[type="radio"] {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.logo {
-  border-radius: 7px;
 }
 
 .signin-art {

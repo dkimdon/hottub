@@ -7,6 +7,7 @@ import { configureApi } from "./api";
 import Help from "./Help";
 import HistoryPanel from "./HistoryPanel";
 import SignIn from "./SignIn";
+import TopBar from "./TopBar";
 import TubArt from "./TubArt";
 import TubPanel from "./TubPanel";
 import UsersPanel from "./UsersPanel";
@@ -126,14 +127,15 @@ function TubAndHistory() {
   const [tub, setTub] = useState(null);
   return (
     <>
-      <main className="card"><TubPanel onTub={setTub} /></main>
-      <section className="card"><HistoryPanel tub={tub} /></section>
+      <main className="card wooden"><TubPanel onTub={setTub} /></main>
+      <section className="card wooden"><HistoryPanel tub={tub} /></section>
     </>
   );
 }
 
 createRoot(document.getElementById("root")).render(
   <>
+    <TopBar environment="preview" email={me.email} onHelp={() => {}} onSignOut={() => {}} />
     <TubAndHistory />
     <section className="card">
       <h2>Every picture</h2>

@@ -206,7 +206,7 @@ describe("Duckling picture", () => {
 
   it("describes the picture and hides the animation from screen readers", () => {
     const { container } = render(<TubArt state="off" />);
-    expect(screen.getByRole("img", { name: /frozen tub/ }).getAttribute("src")).toBe("/tub-off.png");
+    expect(screen.getByRole("img", { name: /frozen tub/ }).getAttribute("src")).toBe("/tub-off.webp");
     expect(container.querySelector(".art-effects").getAttribute("aria-hidden")).toBe("true");
     expect(container.querySelectorAll(".art-snow").length).toBe(8);
   });

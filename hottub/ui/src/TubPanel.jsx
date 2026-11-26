@@ -120,6 +120,13 @@ export default function TubPanel({ onTub }) {
 
   return (
     <>
+      {problem && <p className="error" role="alert">{problem}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
+
+      {/* The controls come first, so nobody has to scroll past the
+          pictures to change the tub. */}
+      <HeatControl tub={tub} now={now} onChanged={refresh} />
+
       <section className="tub-status">
         <div className="tub-status-row">
           <Thermometer
@@ -146,11 +153,6 @@ export default function TubPanel({ onTub }) {
           </div>
         </div>
       </section>
-
-      {problem && <p className="error" role="alert">{problem}</p>}
-      {error && <p className="error" role="alert">{error}</p>}
-
-      <HeatControl tub={tub} now={now} onChanged={refresh} />
     </>
   );
 }

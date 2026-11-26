@@ -5,10 +5,10 @@
 // and stops for people who ask their phone for reduced motion.
 
 const ART = {
-  heating: ["tub-heating.png", "A duckling pours a steaming kettle into the tub"],
-  hot: ["tub-hot.png", "Ducklings relaxing in a warm, bubbly wooden tub"],
-  off: ["tub-off.png", "Ducklings in hats and scarves in a frozen tub with icicles"],
-  waiting: ["tub-waiting.png", "Ducklings asleep in the tub, an alarm clock on the rim"],
+  heating: ["tub-heating.webp", "A duckling pours a steaming kettle into the tub"],
+  hot: ["tub-hot.webp", "Ducklings relaxing in a warm, bubbly wooden tub"],
+  off: ["tub-off.webp", "Ducklings in hats and scarves in a frozen tub with icicles"],
+  waiting: ["tub-waiting.webp", "Ducklings asleep in the tub, an alarm clock on the rim"],
 };
 
 export function artState(tub) {
@@ -41,7 +41,7 @@ export default function TubArt({ state }) {
   const [src, alt] = ART[state];
   return (
     <div className={`tub-art tub-art-${state}`} data-state={state}>
-      <img src={`/${src}`} alt={alt} width="400" height="355" />
+      <img src={`/${src}`} alt={alt} width="500" height="443" />
       <div className="art-effects" aria-hidden="true">
         {EFFECTS[state]}
       </div>

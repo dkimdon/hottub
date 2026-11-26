@@ -93,7 +93,7 @@ export default function SignIn({ onSignedIn }) {
 
   return (
     <main className="card signin">
-      <img className="signin-art" src="/tub-hot.png" alt="Ducklings relaxing in a warm wooden tub" width="200" height="178" />
+      <img className="signin-art" src="/tub-hot.webp" alt="Ducklings relaxing in a warm wooden tub" width="200" height="177" />
       <h1>CoHo Hot Tub</h1>
 
       {step === "sign-in" && (

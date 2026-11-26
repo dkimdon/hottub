@@ -13,14 +13,16 @@
 #
 # This writes into ui/public/:
 #
-#   tub-*.png             the tubs with the white background removed, all
-#                         cropped to the same box so they line up
-#   wood.jpg              the texture, 600 px wide
+#   tub-*.webp            the tubs with the white background removed, all
+#                         cropped to the same box so they line up (cut out
+#                         here as PNG, then made WebP by ui/scripts/webp.mjs,
+#                         which needs "npm install" in ui/ first)
+#   wood.jpg              the texture, 900 px wide (shown at 450)
 #   apple-touch-icon.png, icon-192.png, icon-512.png, favicon-32.png
 #                         the app icon: tub-hot on the app's light blue
 #
-# Windows only (System.Drawing, plus a little C# for the pixel work), so
-# nothing needs installing.  A missing master is skipped.
+# Windows (System.Drawing, plus a little C# for the pixel work) and Node.
+# A missing master is skipped.
 
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Drawing
@@ -120,25 +122,29 @@ foreach ($name in "tub-hot", "tub-heating", "tub-off", "tub-waiting") {
 $pad = 12
 $box = [System.Drawing.Rectangle]::FromLTRB([Math]::Max(0, $box.Left - $pad), [Math]::Max(0, $box.Top - $pad),
     [Math]::Min(1024, $box.Right + $pad), [Math]::Min(1024, $box.Bottom + $pad))
-$outW = 400
+$outW = 500   # shown at up to 250 px, so sharp on high-density phones
 $outH = [int]($outW * $box.Height / $box.Width)
+$tmp = Join-Path ([System.IO.Path]::GetTempPath()) "hottub-cutouts"
+New-Item -ItemType Directory -Force $tmp | Out-Null
+Remove-Item "$tmp\*.png" -ErrorAction SilentlyContinue
 foreach ($name in $cut.Keys) {
     $out, $g = New-Canvas $outW $outH
     $g.DrawImage($cut[$name], (New-Object System.Drawing.Rectangle 0, 0, $outW, $outH), $box, [System.Drawing.GraphicsUnit]::Pixel)
     $g.Dispose()
-    $out.Save("$public\$name.png", [System.Drawing.Imaging.ImageFormat]::Png); $out.Dispose()
-    Report "$public\$name.png"
+    $out.Save("$tmp\$name.png", [System.Drawing.Imaging.ImageFormat]::Png); $out.Dispose()
 }
+node (Join-Path $root "ui\scripts\webp.mjs") $tmp $public
+if ($LASTEXITCODE -ne 0) { throw "webp.mjs failed (run npm install in ui/ first?)" }
 "tub pictures are $outW x $outH"
 
 # The wood texture.
 if (Test-Path "$art\wood.jpg") {
     $src = [System.Drawing.Image]::FromFile("$art\wood.jpg")
-    $w = 600; $h = [int]($w * $src.Height / $src.Width)
+    $w = 900; $h = [int]($w * $src.Height / $src.Width)   # shown 450 px wide
     $out, $g = New-Canvas $w $h
     $g.DrawImage($src, 0, 0, $w, $h); $g.Dispose(); $src.Dispose()
     $params = New-Object System.Drawing.Imaging.EncoderParameters 1
-    $params.Param[0] = New-Object System.Drawing.Imaging.EncoderParameter ([System.Drawing.Imaging.Encoder]::Quality), ([long]80)
+    $params.Param[0] = New-Object System.Drawing.Imaging.EncoderParameter ([System.Drawing.Imaging.Encoder]::Quality), ([long]78)
     $out.Save("$public\wood.jpg", $jpeg, $params); $out.Dispose()
     Report "$public\wood.jpg"
 }

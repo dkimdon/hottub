@@ -335,6 +335,13 @@ def deploy_ui(env):
     # time.  "--delete" only removes files matching that sync's own filters.
     aws("s3", "sync", str(dist / "assets"), f"{target}/assets", "--delete",
         "--cache-control", "public,max-age=31536000,immutable")
+    # The AWS CLI guesses each file's type from its extension, and on Windows
+    # it does not know .webp; with "nosniff" a browser then refuses the
+    # picture.  So the .webp files are copied first with their type stated
+    # ("cp", not "sync", so the type is set even when a file is unchanged);
+    # the sync then finds them up to date and leaves them alone.
+    aws("s3", "cp", str(dist), target, "--recursive", "--exclude", "*", "--include", "*.webp",
+        "--content-type", "image/webp", "--cache-control", "no-cache")
     aws("s3", "sync", str(dist), target, "--delete", "--exclude", "assets/*",
         "--cache-control", "no-cache")
     aws("cloudfront", "create-invalidation", "--distribution-id", outputs["UiDistributionId"],

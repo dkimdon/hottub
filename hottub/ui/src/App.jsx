@@ -4,6 +4,7 @@ import { configureAuth, currentUser, signOut } from "./auth";
 import Help from "./Help";
 import HistoryPanel from "./HistoryPanel";
 import SignIn from "./SignIn";
+import TopBar from "./TopBar";
 import TubPanel from "./TubPanel";
 import UsersPanel from "./UsersPanel";
 
@@ -44,8 +45,8 @@ export default function App() {
     };
   }, []);
 
-  if (startupError) return <main className="card"><p className="error">{startupError}</p></main>;
-  if (user === undefined) return <main className="card"><p className="muted">Loading…</p></main>;
+  if (startupError) return <main className={showHelp || showUsers ? "card" : "card wooden"}><p className="error">{startupError}</p></main>;
+  if (user === undefined) return <main className={showHelp || showUsers ? "card" : "card wooden"}><p className="muted">Loading…</p></main>;
   if (user === null) return <SignIn onSignedIn={async () => setUser(await currentUser())} />;
 
   const showUsers = user.isAdmin && page === "users";
@@ -53,28 +54,16 @@ export default function App() {
 
   return (
     <>
-      <header className="topbar">
-        <h1>
-          <img className="logo" src="/icon-192.png" alt="" width="32" height="32" />
-          CoHo Hot Tub
-          {config.environment !== "live" && <span className="badge">{config.environment}</span>}
-        </h1>
-        <div className="topbar-user">
-          <span className="muted">{user.email}</span>
-          <button className="link" aria-current={showHelp ? "page" : undefined} onClick={() => setPage("help")}>
-            Help
-          </button>
-          <button
-            className="link"
-            onClick={async () => {
-              await signOut();
-              setUser(null);
-            }}
-          >
-            Sign out
-          </button>
-        </div>
-      </header>
+      <TopBar
+        environment={config.environment}
+        email={user.email}
+        helpOpen={showHelp}
+        onHelp={() => setPage("help")}
+        onSignOut={async () => {
+          await signOut();
+          setUser(null);
+        }}
+      />
 
       {user.isAdmin && (
         <nav className="tabs" aria-label="Sections">
@@ -87,7 +76,7 @@ export default function App() {
         </nav>
       )}
 
-      <main className="card">
+      <main className={showHelp || showUsers ? "card" : "card wooden"}>
         {showHelp ? (
           <Help onBack={() => setPage("tub")} />
         ) : showUsers ? (
@@ -97,7 +86,7 @@ export default function App() {
         )}
       </main>
       {!showUsers && !showHelp && (
-        <section className="card">
+        <section className="card wooden">
           <HistoryPanel tub={tub} />
         </section>
       )}

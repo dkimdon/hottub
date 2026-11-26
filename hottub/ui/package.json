@@ -19,6 +19,7 @@
     "@testing-library/user-event": "^14.6.1",
     "@vitejs/plugin-react": "^6.3.0",
     "jsdom": "^31.0.1",
+    "sharp": "^0.33.5",
     "vite": "^8.3.8",
     "vitest": "^5.1.0"
   }

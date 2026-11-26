@@ -2,12 +2,14 @@
 
 The web app: React, built with Vite, plain JavaScript (JSX) and plain CSS.
 Runtime dependencies are `react`, `react-dom` and `aws-amplify` (sign-in only).
+`sharp` is a dev dependency, used only to make the WebP pictures.
 Keep it that way unless there is a strong reason.
 
 ## Files
 
 ```
 src/App.jsx          start-up, signed-in shell, Tub / Users tabs, Help
+src/TopBar.jsx       the header: a wooden sign (wood.jpg) with the name, Help, Sign out
 src/SignIn.jsx       sign in, first-time password, forgotten password
 src/TubPanel.jsx     status card: temperature and status lines (nothing to tap)
 src/HeatControl.jsx  "Heat to [Off] [102]…[106]" buttons, schedule button + form, Cancel timer
@@ -30,7 +32,10 @@ src/ui.test.jsx      component tests (vitest + Testing Library)
 src/features.test.jsx  thermometer marker/bubbles, forecast, stats, heat control timer
 art/                 duckling artwork masters (Gemini, 1024 px, white background;
                      make_images.ps1 cuts the background away)
-public/              pictures and icons made from art/ by ../scripts/make_images.ps1,
+scripts/webp.mjs     turns the cut-out tub pictures into WebP (dev only; uses
+                     the sharp dev dependency)
+public/              pictures (tub-*.webp, about 40 KB each) and icons, made from
+                     art/ by ../scripts/make_images.ps1,
                      and manifest.json, for the browser tab and "Add to Home Screen"
 ```
 
@@ -67,7 +72,7 @@ Deploy with `python ../scripts/deploy.py ui test`.
   container's real pixel width, breaks where readings are missing, labels only
   the latest value, and shows other values on hover, touch or the arrow keys.
 - The status card says what the tub is doing; the controls are below it and
-  look like controls.  One request at a time: a "Heat to" button sets the
+  look like controls; they come first, the status card after them.  One request at a time: a "Heat to" button sets the
   setpoint (and the API drops any timer); "Schedule for later…" sets the
   shared timer (and the API turns the tub off until the timer starts it).
   The current setting's button is highlighted; while a timer waits the
