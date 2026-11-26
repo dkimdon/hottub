@@ -8,15 +8,14 @@ Keep it that way unless there is a strong reason.
 ## Files
 
 ```
-src/App.jsx          start-up, signed-in shell, Tub / Users tabs, Help
-src/TopBar.jsx       the header: a wooden sign (wood.jpg) with the name, Help, Sign out
+src/App.jsx          start-up, signed-in shell, Tub / Help / Users tabs (no header)
 src/SignIn.jsx       sign in, first-time password, forgotten password
 src/TubPanel.jsx     status card: temperature and status lines (nothing to tap)
 src/HeatControl.jsx  "Heat to [Off] [102]…[106]" buttons, schedule button + form, Cancel timer
-src/Help.jsx         Help page (from "Help" in the header): how changes and timers work
+src/Help.jsx         Help tab: how changes and timers work; Sign out
 src/HistoryPanel.jsx      period buttons, graph, table of changes
 src/TemperatureChart.jsx  the graph: hand-written SVG, no chart library
-src/UsersPanel.jsx   admin-only user management
+src/UsersPanel.jsx   admin-only user management; Sign out
 src/Thermometer.jsx  SVG thermometer
 src/TubArt.jsx       duckling picture for the tub's state (heating / hot / off /
                      waiting), beside the thermometer, with CSS animation
@@ -29,6 +28,7 @@ src/api.js           the only file that calls the API
 src/format.js        "5 minutes ago"
 src/styles.css       all styling; light and dark from the system setting
 src/ui.test.jsx      component tests (vitest + Testing Library)
+src/app.test.jsx     the whole app starting up: catches a blank-page crash
 src/features.test.jsx  thermometer marker/bubbles, forecast, stats, heat control timer
 art/                 duckling artwork masters (Gemini, 1024 px, white background;
                      make_images.ps1 cuts the background away)

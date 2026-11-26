@@ -19,8 +19,7 @@
   --ok: #2a66cc;
   --warm: #d62828;
   --line-edge: #8a9aa5;
-  /* The tub's wood, for the header sign and the plaques behind section
-     titles: the painted planks (wood.jpg, from make_images.ps1) under a
+  /* The tub's wood, for the tub and history cards: the painted planks (wood.jpg, from make_images.ps1) under a
      brown wash, with a plain wood colour in case the picture has not
      loaded. */
   --wood-wash: rgba(70, 35, 5, 0.2);
@@ -106,13 +105,11 @@ p {
   --border: rgba(80, 40, 10, 0.4);
 }
 
-/* Words straight on the wood (here and in the header) get a soft cream
+/* Words straight on the wood get a soft cream
    glow that fades into the grain, so they read easily without a box. */
 .card.wooden h2,
 .wooden .stats > span,
-.wooden p.muted,
-.topbar-user .muted,
-.topbar-user button.link {
+.wooden p.muted {
   display: inline-block;
   padding: 4px 14px;
   margin: -4px -6px;
@@ -263,47 +260,16 @@ input[type="radio"] {
 
 /* ---------- Layout ---------- */
 
-/* The header is a wooden sign, in the tub's wood. */
-.topbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 12px;
-  padding: 10px 14px;
-  border-radius: 12px;
-  background: var(--wood);
-  color: var(--wood-text);
-  box-shadow: inset 0 -3px 0 rgba(80, 40, 10, 0.25), 0 1px 3px rgba(0, 0, 0, 0.15);
-  text-shadow: var(--wood-text-shadow);
-}
-
-.topbar .badge {
-  text-shadow: none;
-}
-
-.topbar .muted,
-.topbar button.link {
-  color: var(--wood-text);
-}
-
-.topbar-user {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 0.875rem;
-  min-width: 0;
-}
-
-.topbar-user .muted {
-  overflow-wrap: anywhere;
-}
-
+/* Tub / Help / Users, at the top of the page. */
 .tabs {
   display: flex;
+  align-items: center;
   gap: 4px;
   margin-bottom: 12px;
+}
+
+.sign-out {
+  margin-top: 24px;
 }
 
 .tabs button {
@@ -494,10 +460,6 @@ input[type="radio"] {
   margin-top: 18px;
 }
 
-.topbar-user button.link[aria-current="page"] {
-  font-weight: 600;
-  text-decoration: none;
-}
 
 .visually-hidden {
   position: absolute;
@@ -660,11 +622,6 @@ input[type="radio"] {
   100% { transform: translate(16px, -22px) scale(1.3); opacity: 0; }
 }
 
-.topbar h1 {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
 
 .signin-art {
   display: block;

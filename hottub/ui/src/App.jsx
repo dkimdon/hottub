@@ -4,7 +4,6 @@ import { configureAuth, currentUser, signOut } from "./auth";
 import Help from "./Help";
 import HistoryPanel from "./HistoryPanel";
 import SignIn from "./SignIn";
-import TopBar from "./TopBar";
 import TubPanel from "./TubPanel";
 import UsersPanel from "./UsersPanel";
 
@@ -45,50 +44,48 @@ export default function App() {
     };
   }, []);
 
-  if (startupError) return <main className={showHelp || showUsers ? "card" : "card wooden"}><p className="error">{startupError}</p></main>;
-  if (user === undefined) return <main className={showHelp || showUsers ? "card" : "card wooden"}><p className="muted">Loading…</p></main>;
+  if (startupError) return <main className="card"><p className="error">{startupError}</p></main>;
+  if (user === undefined) return <main className="card"><p className="muted">Loading…</p></main>;
   if (user === null) return <SignIn onSignedIn={async () => setUser(await currentUser())} />;
 
-  const showUsers = user.isAdmin && page === "users";
-  const showHelp = page === "help";
+  const current = page === "users" && !user.isAdmin ? "tub" : page;
+  const tabs = [["tub", "Tub"], ["help", "Help"], ...(user.isAdmin ? [["users", "Users"]] : [])];
+  async function leave() {
+    await signOut();
+    setUser(null);
+    setPage("tub");
+  }
 
   return (
     <>
-      <TopBar
-        environment={config.environment}
-        email={user.email}
-        helpOpen={showHelp}
-        onHelp={() => setPage("help")}
-        onSignOut={async () => {
-          await signOut();
-          setUser(null);
-        }}
-      />
+      <nav className="tabs" aria-label="Sections">
+        {tabs.map(([id, label]) => (
+          <button key={id} aria-current={current === id ? "page" : undefined} onClick={() => setPage(id)}>
+            {label}
+          </button>
+        ))}
+        {config.environment !== "live" && <span className="badge">{config.environment}</span>}
+      </nav>
 
-      {user.isAdmin && (
-        <nav className="tabs" aria-label="Sections">
-          <button aria-current={page === "tub" ? "page" : undefined} onClick={() => setPage("tub")}>
-            Tub
-          </button>
-          <button aria-current={showUsers ? "page" : undefined} onClick={() => setPage("users")}>
-            Users
-          </button>
-        </nav>
+      {current === "tub" && (
+        <>
+          <main className="card wooden">
+            <TubPanel onTub={setTub} />
+          </main>
+          <section className="card wooden">
+            <HistoryPanel tub={tub} />
+          </section>
+        </>
       )}
-
-      <main className={showHelp || showUsers ? "card" : "card wooden"}>
-        {showHelp ? (
-          <Help onBack={() => setPage("tub")} />
-        ) : showUsers ? (
-          <UsersPanel me={user} />
-        ) : (
-          <TubPanel onTub={setTub} />
-        )}
-      </main>
-      {!showUsers && !showHelp && (
-        <section className="card wooden">
-          <HistoryPanel tub={tub} />
-        </section>
+      {current === "help" && (
+        <main className="card">
+          <Help onSignOut={leave} />
+        </main>
+      )}
+      {current === "users" && (
+        <main className="card">
+          <UsersPanel me={user} onSignOut={leave} />
+        </main>
       )}
     </>
   );

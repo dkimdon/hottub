@@ -1,6 +1,7 @@
-// The Help page, reached from "Help" in the header.
+// The Help tab.  Sign out is here too, so everyone can reach it (admins also
+// have it on the Users tab).
 
-export default function Help({ onBack }) {
+export default function Help({ onSignOut }) {
   return (
     <div className="help">
       <h2>Help</h2>
@@ -37,9 +38,11 @@ export default function Help({ onBack }) {
         was made at the tub. Whoever changes it last wins.
       </p>
 
-      <button type="button" className="link" onClick={onBack}>
-        Back to the tub
-      </button>
+      <p className="sign-out">
+        <button type="button" onClick={onSignOut}>
+          Sign out
+        </button>
+      </p>
     </div>
   );
 }

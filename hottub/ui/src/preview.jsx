@@ -7,7 +7,6 @@ import { configureApi } from "./api";
 import Help from "./Help";
 import HistoryPanel from "./HistoryPanel";
 import SignIn from "./SignIn";
-import TopBar from "./TopBar";
 import TubArt from "./TubArt";
 import TubPanel from "./TubPanel";
 import UsersPanel from "./UsersPanel";
@@ -135,7 +134,11 @@ function TubAndHistory() {
 
 createRoot(document.getElementById("root")).render(
   <>
-    <TopBar environment="preview" email={me.email} onHelp={() => {}} onSignOut={() => {}} />
+    <nav className="tabs" aria-label="Sections">
+      <button aria-current="page">Tub</button>
+      <button>Help</button>
+      <button>Users</button>
+    </nav>
     <TubAndHistory />
     <section className="card">
       <h2>Every picture</h2>
@@ -148,8 +151,8 @@ createRoot(document.getElementById("root")).render(
         ))}
       </div>
     </section>
-    <section className="card"><Help onBack={() => {}} /></section>
-    <section className="card"><UsersPanel me={me} /></section>
+    <section className="card"><Help onSignOut={() => {}} /></section>
+    <section className="card"><UsersPanel me={me} onSignOut={() => {}} /></section>
     <SignIn onSignedIn={() => {}} />
   </>
 );
