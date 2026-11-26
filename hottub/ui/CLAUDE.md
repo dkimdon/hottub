@@ -16,6 +16,8 @@ src/HistoryPanel.jsx      period buttons, graph, table of changes
 src/TemperatureChart.jsx  the graph: hand-written SVG, no chart library
 src/UsersPanel.jsx   admin-only user management
 src/Thermometer.jsx  SVG thermometer
+src/TubArt.jsx       duckling picture for the tub's state (heating / hot / off /
+                     waiting), beside the thermometer, with CSS animation
 src/temperatureColours.jsx  colour scale (icy white → blue → purple → red)
                      shared by the thermometer and the graph
 src/preview.jsx      development only: every screen with made-up data
@@ -26,8 +28,10 @@ src/format.js        "5 minutes ago"
 src/styles.css       all styling; light and dark from the system setting
 src/ui.test.jsx      component tests (vitest + Testing Library)
 src/features.test.jsx  thermometer marker/bubbles, forecast, stats, heat control timer
-public/              icons (drawn by ../scripts/make_icons.py) and
-                     manifest.json, for the browser tab and "Add to Home Screen"
+art/                 duckling artwork masters (Gemini, 1024 px, white background;
+                     make_images.ps1 cuts the background away)
+public/              pictures and icons made from art/ by ../scripts/make_images.ps1,
+                     and manifest.json, for the browser tab and "Add to Home Screen"
 ```
 
 ## Commands

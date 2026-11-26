@@ -17,6 +17,11 @@
   --ok: #2a66cc;
   --warm: #d62828;
   --line-edge: #8a9aa5;
+  /* The tub's wood, for the header sign: painted staves.  (A wood texture
+     image could go in front of this: url("/wood.jpg") center / 320px auto
+     repeat, from make_images.ps1.) */
+  --wood-staves: repeating-linear-gradient(90deg, #d79f61 0 34px, #c4884a 34px 35px, #9c6430 35px 37px);
+  --wood-text: #fff8ec;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -201,6 +206,7 @@ input[type="radio"] {
 
 /* ---------- Layout ---------- */
 
+/* The header is a wooden sign, in the tub's wood. */
 .topbar {
   display: flex;
   justify-content: space-between;
@@ -208,6 +214,21 @@ input[type="radio"] {
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--wood-staves);
+  color: var(--wood-text);
+  box-shadow: inset 0 -3px 0 rgba(80, 40, 10, 0.25), 0 1px 3px rgba(0, 0, 0, 0.15);
+  text-shadow: 0 1px 2px rgba(70, 35, 5, 0.7);
+}
+
+.topbar .badge {
+  text-shadow: none;
+}
+
+.topbar .muted,
+.topbar button.link {
+  color: var(--wood-text);
 }
 
 .topbar-user {
@@ -253,17 +274,26 @@ input[type="radio"] {
 
 /* ---------- Tub ---------- */
 
-/* The status card: what the tub is doing.  Nothing in it but "Cancel timer"
-   can be tapped; the controls are below it. */
+/* The status card: what the tub is doing.  The thermometer and the
+   ducklings' tub sit side by side, the sentences beside them (or below them on
+   a narrow phone).  Nothing in it can be tapped; the controls are below it. */
 .tub-status {
-  display: flex;
-  gap: 16px;
-  align-items: center;
   margin-bottom: 18px;
-  padding: 14px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--bg);
+}
+
+.tub-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  align-items: center;
+  padding: 14px;
+}
+
+.tub-status-row > div:last-child {
+  flex: 1 1 220px;
 }
 
 .temperature {
@@ -443,8 +473,157 @@ input[type="radio"] {
   100% { transform: translateY(var(--rise)); opacity: 0; }
 }
 
+/* ---------- The duckling picture (TubArt.jsx) ---------- */
+
+/* As big as fits beside the thermometer, up to 250 px. */
+.tub-art {
+  position: relative;
+  flex: 0 1 250px;
+  min-width: 0;
+}
+
+.tub-art img {
+  display: block;
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(0 3px 2px rgba(60, 30, 5, 0.3));
+}
+
+.art-effects {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.art-effects span {
+  position: absolute;
+  display: block;
+}
+
+/* Heating: steam rises from the kettle, ripples spread where it pours. */
+.art-steam {
+  left: calc(26% + var(--i) * 9%);
+  top: 8%;
+  width: 13%;
+  height: 20%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255, 255, 255, 0.9), transparent);
+  filter: blur(3px);
+  animation: art-steam 3.6s infinite ease-out;
+  animation-delay: calc(var(--i) * -1.2s);
+}
+
+@keyframes art-steam {
+  0% { transform: translateY(0) scale(0.6); opacity: 0; }
+  25% { opacity: 0.85; }
+  100% { transform: translateY(-24px) scale(1.4); opacity: 0; }
+}
+
+.art-ripple {
+  left: 32%;
+  top: 34%;
+  width: 14%;
+  height: 6%;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  animation: art-ripple 1.8s infinite ease-out;
+  animation-delay: calc(var(--i) * -0.9s);
+}
+
+@keyframes art-ripple {
+  0% { transform: scale(0.3); opacity: 0.9; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+
+/* Hot: bubbles rise in the water. */
+.art-bubble {
+  left: calc(24% + var(--i) * 12%);
+  top: 44%;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.25);
+  animation: art-bubble 2.8s infinite ease-in;
+  animation-delay: calc(var(--i) * -0.55s);
+}
+
+@keyframes art-bubble {
+  0% { transform: translateY(0) scale(0.5); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translateY(-20px) scale(1.1); opacity: 0; }
+}
+
+/* Off: snow falls. */
+.art-snow {
+  left: calc(6% + var(--i) * 12%);
+  top: -6px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 3px rgba(120, 170, 220, 0.8);
+  animation: art-snow 5s infinite linear;
+  animation-delay: calc(var(--i) * -0.7s);
+}
+
+.art-snow:nth-child(odd) {
+  width: 3px;
+  height: 3px;
+  animation-duration: 6.5s;
+}
+
+@keyframes art-snow {
+  0% { transform: translate(0, 0); opacity: 0; }
+  10% { opacity: 1; }
+  50% { transform: translate(5px, 60px); }
+  100% { transform: translate(-3px, 120px); opacity: 0.9; }
+}
+
+/* Waiting: z's float up from the sleepers. */
+.art-z {
+  left: 22%;
+  top: 22%;
+  font: 700 11px/1 system-ui, sans-serif;
+  color: #4a5a78;
+  animation: art-z 3s infinite ease-out;
+  animation-delay: calc(var(--i) * -1s);
+}
+
+@keyframes art-z {
+  0% { transform: translate(0, 0) scale(0.7); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translate(16px, -22px) scale(1.3); opacity: 0; }
+}
+
+.topbar h1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.logo {
+  border-radius: 7px;
+}
+
+.signin-art {
+  display: block;
+  margin: 0 auto 12px;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .thermometer-bubble { animation: none; }
+  .thermometer-bubble,
+  .art-effects span {
+    animation: none;
+  }
+  .art-snow,
+  .art-bubble,
+  .art-steam,
+  .art-ripple,
+  .art-z {
+    display: none;
+  }
 }
 
 .thermometer-tick {

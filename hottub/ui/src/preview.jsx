@@ -7,6 +7,7 @@ import { configureApi } from "./api";
 import Help from "./Help";
 import HistoryPanel from "./HistoryPanel";
 import SignIn from "./SignIn";
+import TubArt from "./TubArt";
 import TubPanel from "./TubPanel";
 import UsersPanel from "./UsersPanel";
 import "./styles.css";
@@ -134,6 +135,17 @@ function TubAndHistory() {
 createRoot(document.getElementById("root")).render(
   <>
     <TubAndHistory />
+    <section className="card">
+      <h2>Every picture</h2>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center" }}>
+        {["heating", "hot", "off", "waiting"].map((s) => (
+          <div key={s} style={{ textAlign: "center" }}>
+            <TubArt state={s} />
+            <span className="muted">{s}</span>
+          </div>
+        ))}
+      </div>
+    </section>
     <section className="card"><Help onBack={() => {}} /></section>
     <section className="card"><UsersPanel me={me} /></section>
     <SignIn onSignedIn={() => {}} />

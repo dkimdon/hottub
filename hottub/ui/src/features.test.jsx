@@ -9,6 +9,7 @@ import * as api from "./api";
 import HistoryPanel from "./HistoryPanel";
 import { timeChoices } from "./HeatControl";
 import Thermometer from "./Thermometer";
+import TubArt, { artState } from "./TubArt";
 import TubPanel from "./TubPanel";
 
 vi.mock("./api");
@@ -190,5 +191,23 @@ describe("Heat control with a time", () => {
     api.getTub.mockResolvedValue(tubState({ setpoint_source: "timer", setpoint_changed_by: "sam@example.com" }));
     render(<TubPanel />);
     expect(await screen.findByText(/made by a timer sam@example.com set/)).toBeTruthy();
+  });
+});
+
+describe("Duckling picture", () => {
+  it("matches the tub's state", () => {
+    const base = { setpoint: "104", heating: true, timer: null };
+    expect(artState(base)).toBe("heating");
+    expect(artState({ ...base, heating: false })).toBe("hot");
+    expect(artState({ ...base, setpoint: "off", heating: false })).toBe("off");
+    expect(artState({ ...base, setpoint: null })).toBe("off");
+    expect(artState({ ...base, setpoint: "off", timer: { setpoint: "104" } })).toBe("waiting");
+  });
+
+  it("describes the picture and hides the animation from screen readers", () => {
+    const { container } = render(<TubArt state="off" />);
+    expect(screen.getByRole("img", { name: /frozen tub/ }).getAttribute("src")).toBe("/tub-off.png");
+    expect(container.querySelector(".art-effects").getAttribute("aria-hidden")).toBe("true");
+    expect(container.querySelectorAll(".art-snow").length).toBe(8);
   });
 });

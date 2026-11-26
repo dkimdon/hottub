@@ -3,6 +3,7 @@ import { getTub } from "./api";
 import { aboutWhen, ago, secondsSince } from "./format";
 import HeatControl from "./HeatControl";
 import Thermometer from "./Thermometer";
+import TubArt, { artState } from "./TubArt";
 
 const REFRESH_MS = 30_000;
 const STALE_SECONDS = 30 * 60;
@@ -120,26 +121,29 @@ export default function TubPanel({ onTub }) {
   return (
     <>
       <section className="tub-status">
-        <Thermometer
-          value={temperature}
-          setpoint={tub.setpoint && tub.setpoint !== "off" ? Number(tub.setpoint) : null}
-          heating={Boolean(tub.heating)}
-        />
-        <div>
-          <p className="temperature">
-            {temperature === null ? "—" : `${temperature}°F`}
-            {tub.heating && <span className="badge heating">heating</span>}
-          </p>
-          <ul className="status-lines">
-            <li>
-              {tub.temperature_measured_at
-                ? `The water temperature was last measured ${ago(tub.temperature_measured_at, now)}.`
-                : "The water temperature has not been measured yet."}
-            </li>
-            <li>{tub.timer ? timerSentence(tub.timer, now) : setpointSentence(tub.setpoint)}</li>
-            {ready && <li>{ready}</li>}
-            {changedBy && <li>{changedBy}</li>}
-          </ul>
+        <div className="tub-status-row">
+          <Thermometer
+            value={temperature}
+            setpoint={tub.setpoint && tub.setpoint !== "off" ? Number(tub.setpoint) : null}
+            heating={Boolean(tub.heating)}
+          />
+          <TubArt state={artState(tub)} />
+          <div>
+            <p className="temperature">
+              {temperature === null ? "—" : `${temperature}°F`}
+              {tub.heating && <span className="badge heating">heating</span>}
+            </p>
+            <ul className="status-lines">
+              <li>
+                {tub.temperature_measured_at
+                  ? `The water temperature was last measured ${ago(tub.temperature_measured_at, now)}.`
+                  : "The water temperature has not been measured yet."}
+              </li>
+              <li>{tub.timer ? timerSentence(tub.timer, now) : setpointSentence(tub.setpoint)}</li>
+              {ready && <li>{ready}</li>}
+              {changedBy && <li>{changedBy}</li>}
+            </ul>
+          </div>
         </div>
       </section>
 

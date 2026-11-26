@@ -55,6 +55,7 @@ export default function App() {
     <>
       <header className="topbar">
         <h1>
+          <img className="logo" src="/icon-192.png" alt="" width="32" height="32" />
           CoHo Hot Tub
           {config.environment !== "live" && <span className="badge">{config.environment}</span>}
         </h1>
