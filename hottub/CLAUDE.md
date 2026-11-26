@@ -4,11 +4,7 @@ Guidance for Claude Code when working in this directory.
 
 ## What this is
 
-A hot tub control system for about a dozen users.  It replaces the old system
-in `../hottub-app/` (UI, AppSync, AWS IoT) and `../balboa_worldwide_app/` (Ruby
-operator), which stays in service until this one goes live.  Do not modify
-those directories; they are reference only.  The old operator's logic is in
-`bin/bwa_aws_iot_thing` on the `origin/master` branch of `balboa_worldwide_app`.
+A hot tub control system for about a dozen users.  
 
 Priorities, in order: simple, easy to maintain, few dependencies.  It will
 never be more than a small application.
@@ -77,8 +73,7 @@ template, in us-west-2.  Always deploy and check `test` first.
 There is only one tub, so only one stack can have the operator.  `live` is the
 one with the tub and the real users; `test` is a sandbox with no operator (its
 tub page says the controller is not connected), for trying changes and
-user-admin emails safely.  Until go-live the operator points at `test`, so
-for now `test` controls the real tub.
+user-admin emails safely.
 
 ```bash
 python scripts/deploy.py shared test                    # certificate + SES; prints DNS records
